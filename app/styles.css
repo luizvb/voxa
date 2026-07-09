@@ -1,0 +1,154 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f7fb;
+  color: #172033;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+p {
+  margin: 8px 0 0;
+  color: #536076;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  height: 40px;
+  border: 1px solid #1f5eff;
+  border-radius: 8px;
+  background: #1f5eff;
+  color: white;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+input {
+  height: 38px;
+  border: 1px solid #c5ccda;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: white;
+  color: #172033;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3d485c;
+}
+
+label:first-child {
+  display: grid;
+  align-items: stretch;
+}
+
+.toolbar,
+.controls,
+.status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.controls {
+  justify-content: flex-start;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.status-line {
+  border: 1px solid #d7dde9;
+  border-radius: 8px;
+  background: white;
+  padding: 12px 14px;
+  color: #263246;
+}
+
+#timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.player,
+.history {
+  margin-top: 22px;
+}
+
+audio {
+  width: 100%;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-item {
+  display: grid;
+  height: auto;
+  gap: 4px;
+  width: 100%;
+  border-color: #d7dde9;
+  background: white;
+  color: #172033;
+  padding: 12px;
+  text-align: left;
+}
+
+.history-item span,
+.empty {
+  color: #647187;
+}
+
+details {
+  margin-top: 24px;
+}
+
+summary {
+  cursor: pointer;
+  color: #3d485c;
+}
+
+.diagnostics-actions {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+pre {
+  min-height: 120px;
+  overflow: auto;
+  border: 1px solid #d7dde9;
+  border-radius: 8px;
+  background: #101827;
+  color: #dbe8ff;
+  padding: 16px;
+}

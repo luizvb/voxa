@@ -1,0 +1,52 @@
+{
+  "name": "bidirectional-voice-recorder",
+  "version": "0.1.0",
+  "description": "macOS Electron app with a Go sidecar for recording microphone and system audio sessions.",
+  "license": "MIT",
+  "author": "Luiz Neto",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luizvb/bidirectional-voice-recorder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/luizvb/bidirectional-voice-recorder/issues"
+  },
+  "homepage": "https://github.com/luizvb/bidirectional-voice-recorder#readme",
+  "keywords": [
+    "electron",
+    "go",
+    "macos",
+    "audio",
+    "recorder",
+    "system-audio",
+    "voice-recording"
+  ],
+  "main": "app/main.js",
+  "scripts": {
+    "build:go": "go build -o bin/recorderd ./cmd/recorderd",
+    "dev": "npm run build:go && electron .",
+    "test": "node --test test/*.test.js",
+    "test:go": "go test ./...",
+    "test:all": "npm run test:go && npm test"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.luizneto.bidirectional-voice-recorder",
+    "productName": "Bidirectional Voice Recorder",
+    "files": [
+      "app/**/*",
+      "bin/recorderd"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "This app records your microphone when you start a recording.",
+        "NSAudioCaptureUsageDescription": "This app records system audio so both sides of a call can be captured."
+      }
+    }
+  }
+}

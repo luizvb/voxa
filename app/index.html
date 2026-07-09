@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' file: blob:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bidirectional Voice Recorder</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="toolbar">
+        <div>
+          <h1>Bidirectional Voice Recorder</h1>
+          <p>Record microphone and system audio, then replay previous sessions.</p>
+        </div>
+        <button id="openFolder">Open folder</button>
+      </section>
+
+      <section class="controls">
+        <label>
+          Session name
+          <input id="sessionName" value="Quick recording" />
+        </label>
+        <label>
+          <input id="includeSystem" type="checkbox" checked />
+          Include system audio
+        </label>
+        <button id="start">Start</button>
+        <button id="stop" disabled>Stop</button>
+      </section>
+
+      <section class="status-line">
+        <span id="status">Ready</span>
+        <span id="timer">00:00</span>
+      </section>
+
+      <section class="player">
+        <h2>Playback</h2>
+        <audio id="player" controls></audio>
+      </section>
+
+      <section class="history">
+        <h2>History</h2>
+        <div id="historyList" class="history-list"></div>
+      </section>
+
+      <details>
+        <summary>Developer diagnostics</summary>
+        <div class="diagnostics-actions">
+          <button id="probe">Probe Go sidecar</button>
+          <button id="simulated">Create simulated WAV session</button>
+        </div>
+        <pre id="output" aria-live="polite"></pre>
+      </details>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
