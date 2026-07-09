@@ -10,7 +10,7 @@ declare global {
 export function useRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [status, setStatus] = useState('Ready');
-  const [sessionName, setSessionName] = useState('VoiceDesk Session');
+  const [sessionName, setSessionName] = useState('Voxa Session');
   
   // Timer state
   const [elapsedMs, setElapsedMs] = useState(0);

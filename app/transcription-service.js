@@ -3,16 +3,20 @@ const fs = require('node:fs/promises');
 const DEEPGRAM_ENDPOINT = 'https://api.deepgram.com/v1/listen';
 
 function createDeepgramUrl(options = {}) {
+  const { maxQuality = false } = options;
   const params = new URLSearchParams({
     model: 'nova-3',
+    diarize_model: 'latest',
     smart_format: 'true',
     punctuate: 'true',
-    detect_language: 'true',
-    paragraphs: 'true',
-    utterances: 'true',
-    diarize: 'true',
-    multichannel: 'true'
+    diarize: 'true'
   });
+
+  if (maxQuality) {
+    params.set('detect_language', 'true');
+    params.set('paragraphs', 'true');
+    params.set('utterances', 'true');
+  }
 
   return `${DEEPGRAM_ENDPOINT}?${params.toString()}`;
 }

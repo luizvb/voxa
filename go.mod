@@ -1,3 +1,3 @@
-module bidirectional-voice-recorder
+module voxa
 
 go 1.26

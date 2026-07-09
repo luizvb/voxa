@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"bidirectional-voice-recorder/internal/audio"
-	"bidirectional-voice-recorder/internal/wav"
+	"voxa/internal/audio"
+	"voxa/internal/wav"
 )
 
 type Config struct {

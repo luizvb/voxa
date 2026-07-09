@@ -1,19 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
-  --color-card: #121212;
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-primary: #4FACFE;
-  --color-muted: #27272a;
+  --color-background: #111111;
+  --color-foreground: #FFFFFF;
+  --color-card: #1A1A1A;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-primary: #00E5FF;
+  --color-accent: #B400FF;
+  --color-muted: #222222;
+  --color-muted-foreground: #A1A1AA;
+  
+  --font-sans: 'Inter', sans-serif;
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  font-family: var(--font-sans);
   font-feature-settings: "rlig" 1, "calt" 1;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Premium utility classes */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .drag-region {

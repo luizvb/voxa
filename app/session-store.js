@@ -111,6 +111,39 @@ async function listRecordings(userDataPath) {
   return recordings;
 }
 
+async function deleteRecording(userDataPath, id) {
+  const root = await ensureRecordingsRoot(userDataPath);
+  const sessionDir = path.join(root, id);
+  await fs.rm(sessionDir, { recursive: true, force: true });
+  return true;
+}
+
+async function saveAnalysis(userDataPath, id, analysisData) {
+  const root = await ensureRecordingsRoot(userDataPath);
+  const sessionDir = path.join(root, id);
+  const analysisPath = path.join(sessionDir, 'analysis.json');
+  await fs.writeFile(analysisPath, JSON.stringify(analysisData, null, 2));
+  
+  const metadata = await getRecording(userDataPath, id);
+  const updated = {
+    ...metadata,
+    analysisFile: analysisPath
+  };
+  await fs.writeFile(path.join(sessionDir, 'metadata.json'), JSON.stringify(updated, null, 2));
+  
+  return analysisData;
+}
+
+async function getAnalysis(userDataPath, id) {
+  const root = await ensureRecordingsRoot(userDataPath);
+  const analysisPath = path.join(root, id, 'analysis.json');
+  try {
+    return JSON.parse(await fs.readFile(analysisPath, 'utf8'));
+  } catch {
+    return null; // Analysis not generated yet
+  }
+}
+
 module.exports = {
   createSessionId,
   getRecording,
@@ -118,5 +151,8 @@ module.exports = {
   listRecordings,
   recordingsRoot,
   saveRecording,
-  saveTranscript
+  saveTranscript,
+  deleteRecording,
+  saveAnalysis,
+  getAnalysis
 };

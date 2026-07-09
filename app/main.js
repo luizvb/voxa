@@ -3,10 +3,14 @@ const { loadEnvFile } = require('./env-loader');
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
-const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell, protocol, net, Tray, Menu, globalShortcut, nativeImage } = require('electron');
+
+let tray = null;
+let isQuitting = false;
 const { spawnFile } = require('./sidecar');
-const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript } = require('./session-store');
+const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript, deleteRecording, saveAnalysis, getAnalysis } = require('./session-store');
 const { transcribeWithDeepgram } = require('./transcription-service');
+const { analyzeTranscriptWithOpenRouter } = require('./openrouter-service');
 const { pathToFileURL } = require('node:url');
 
 protocol.registerSchemesAsPrivileged([
@@ -24,6 +28,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false
     }
+  });
+
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win.hide();
+    }
+    return false;
   });
 
   if (process.env.NODE_ENV === 'development') {
@@ -71,6 +83,10 @@ ipcMain.handle('recordings:open-folder', async () => {
   return root;
 });
 
+ipcMain.handle('recordings:delete', async (_event, id) => {
+  return deleteRecording(app.getPath('userData'), id);
+});
+
 ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
   const recording = await getRecording(app.getPath('userData'), input.recordingId);
   const result = await transcribeWithDeepgram({
@@ -85,6 +101,25 @@ ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
 
 ipcMain.handle('transcriptions:get', async (_event, input) => {
   return getTranscript(app.getPath('userData'), input.recordingId);
+});
+
+ipcMain.handle('llm:analyze', async (_event, input) => {
+  const { recordingId } = input;
+  const transcript = await getTranscript(app.getPath('userData'), recordingId);
+
+  if (!transcript || !transcript.markdown) {
+    throw new Error('No transcript available to analyze.');
+  }
+
+  const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite-preview-07-24';
+  const apiKey = process.env.OPENROUTER_API_KEY;
+
+  const analysis = await analyzeTranscriptWithOpenRouter(apiKey, transcript.markdown, model);
+  return saveAnalysis(app.getPath('userData'), recordingId, analysis);
+});
+
+ipcMain.handle('llm:get-analysis', async (_event, input) => {
+  return getAnalysis(app.getPath('userData'), input.recordingId);
 });
 
 ipcMain.handle('window:resize', (event, width, height) => {
@@ -109,9 +144,59 @@ app.whenReady().then(() => {
 
   createWindow();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  // Create Tray
+  const icon = nativeImage.createEmpty();
+  tray = new Tray(icon);
+  tray.setTitle('🎙️');
+  tray.setToolTip('Voxa');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Recorder', click: () => {
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) {
+          win.show();
+          win.focus();
+        }
+      }
+    },
+    {
+      label: 'Toggle Recording', click: () => {
+        const win = BrowserWindow.getAllWindows()[0];
+        if (win) win.webContents.send('shortcut:record');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit', click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  tray.setContextMenu(contextMenu);
+
+  // Global Shortcut
+  globalShortcut.register('CommandOrControl+Shift+R', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.webContents.send('shortcut:record');
+    }
   });
+
+  app.on('activate', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      win.show();
+      win.focus();
+    } else {
+      createWindow();
+    }
+  });
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('window-all-closed', () => {

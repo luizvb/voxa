@@ -1,17 +1,17 @@
 {
-  "name": "bidirectional-voice-recorder",
+  "name": "voxa",
   "version": "0.1.0",
-  "description": "macOS Electron app with a Go sidecar for recording microphone and system audio sessions.",
+  "description": "AI Conversation Intelligence Platform",
   "license": "MIT",
   "author": "Luiz Neto",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/luizvb/bidirectional-voice-recorder.git"
+    "url": "git+https://github.com/luizvb/voxa.git"
   },
   "bugs": {
-    "url": "https://github.com/luizvb/bidirectional-voice-recorder/issues"
+    "url": "https://github.com/luizvb/voxa/issues"
   },
-  "homepage": "https://github.com/luizvb/bidirectional-voice-recorder#readme",
+  "homepage": "https://github.com/luizvb/voxa#readme",
   "keywords": [
     "electron",
     "go",
@@ -49,8 +49,8 @@
     "vite": "^8.1.4"
   },
   "build": {
-    "appId": "com.luizneto.bidirectional-voice-recorder",
-    "productName": "Bidirectional Voice Recorder",
+    "appId": "com.luizneto.voxa",
+    "productName": "Voxa",
     "files": [
       "app/**/*",
       "bin/recorderd"

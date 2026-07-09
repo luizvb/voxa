@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"bidirectional-voice-recorder/internal/capture"
+	"voxa/internal/capture"
 )
 
-func TestRecordCreatesBidirectionalWavArtifacts(t *testing.T) {
+func TestRecordCreatesVoxaWavArtifacts(t *testing.T) {
 	dir := t.TempDir()
 
 	result, err := Record(capture.SimulatedPair{Frames: 160}, Config{

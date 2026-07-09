@@ -5,7 +5,7 @@ package capture
 import (
 	"errors"
 
-	"bidirectional-voice-recorder/internal/audio"
+	"voxa/internal/audio"
 )
 
 var ErrNativeCaptureNotImplemented = errors.New("native macOS capture is not implemented yet; use Core Audio Tap or Electron desktopCapturer behind this interface")

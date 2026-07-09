@@ -47,7 +47,7 @@ test('renderer page allows local media playback and loads recorder controls', ()
   assert.match(html, /id="transcribe"/);
   assert.match(html, /id="transcriptOutput"/);
   assert.match(html, /Deepgram diarization/);
-  assert.match(html, /VoiceDesk/);
+  assert.match(html, /Voxa/);
   assert.match(html, /<audio id="player" controls>/);
   assert.match(preload, /saveRecording/);
   assert.match(preload, /listRecordings/);

@@ -5,7 +5,7 @@ package capture
 import (
 	"errors"
 
-	"bidirectional-voice-recorder/internal/audio"
+	"voxa/internal/audio"
 )
 
 var ErrNativeCaptureNotImplemented = errors.New("native capture is only planned for macOS in this scaffold")

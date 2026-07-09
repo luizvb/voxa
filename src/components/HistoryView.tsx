@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, FileText, Loader2, HardDrive, Clock, Search } from 'lucide-react';
+import { Play, Pause, FileText, Loader2, HardDrive, Clock, Search, Trash2, BrainCircuit } from 'lucide-react';
+import AIAnalysis from './AIAnalysis';
 import clsx from 'clsx';
 
 export default function HistoryView() {
@@ -9,6 +10,10 @@ export default function HistoryView() {
   
   // Transcript state
   const [transcriptData, setTranscriptData] = useState<{markdown?: string, status?: string, isTranscribing: boolean}>({ isTranscribing: false });
+  
+  // AI Analysis state
+  const [aiData, setAiData] = useState<{analysis?: any, status?: string, isAnalyzing: boolean}>({ isAnalyzing: false });
+  const [activeTab, setActiveTab] = useState<'transcript' | 'analysis'>('transcript');
   
   // Player state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -58,11 +63,20 @@ export default function HistoryView() {
       try {
         const result = await window.recorder.getTranscript(rec.id);
         setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: `Saved (${rec.transcript.quality})` });
+        
+        // Also load analysis if it exists
+        const analysis = await window.recorder.getAnalysis(rec.id);
+        if (analysis) {
+          setAiData({ analysis, isAnalyzing: false });
+        } else {
+          setAiData({ isAnalyzing: false, status: 'No AI analysis yet' });
+        }
       } catch (e: any) {
         setTranscriptData({ status: 'Error loading transcript: ' + e.message, isTranscribing: false });
       }
     } else {
       setTranscriptData({ status: 'No transcript yet', isTranscribing: false });
+      setAiData({ isAnalyzing: false, status: 'Transcript required for analysis' });
     }
   };
 
@@ -96,8 +110,36 @@ export default function HistoryView() {
     }
   };
 
+  const handleAnalyze = async () => {
+    if (!selected) return;
+    setAiData({ isAnalyzing: true, status: 'Analyzing with OpenRouter...' });
+    setActiveTab('analysis');
+    
+    try {
+      const result = await window.recorder.analyzeWithLLM(selected.id);
+      setAiData({ analysis: result, isAnalyzing: false });
+    } catch (e: any) {
+      setAiData({ isAnalyzing: false, status: `Failed: ${e.message}` });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    if (confirm('Are you sure you want to delete this recording?')) {
+      try {
+        await window.recorder.deleteRecording(selected.id);
+        setSelectedId(null);
+        setTranscriptData({ isTranscribing: false });
+        loadRecordings();
+      } catch (e) {
+        console.error('Failed to delete recording', e);
+        alert('Failed to delete recording.');
+      }
+    }
+  };
+
   return (
-    <div className="flex h-full gap-6">
+    <div className="flex flex-col md:flex-row h-full gap-6">
       <audio 
         ref={audioRef} 
         onEnded={() => setIsPlaying(false)} 
@@ -106,7 +148,10 @@ export default function HistoryView() {
       />
 
       {/* List Column */}
-      <div className="w-[300px] flex flex-col gap-4 border-r border-white/10 pr-6">
+      <div className={clsx(
+        "w-full md:w-[300px] flex flex-col gap-4 md:border-r border-white/10 md:pr-6",
+        selected ? "h-[30vh] md:h-full border-b md:border-b-0 pb-4 md:pb-0" : "h-full"
+      )}>
         <h2 className="text-xl font-semibold text-white/90">History</h2>
         
         <div className="relative">
@@ -158,12 +203,21 @@ export default function HistoryView() {
       <div className="flex-1 flex flex-col">
         {selected ? (
           <>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-white/90">{selected.name}</h2>
-              <div className="flex items-center gap-4 mt-2 text-sm text-white/50">
-                <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {new Date(selected.createdAt).toLocaleString()}</span>
-                <span className="flex items-center gap-1.5"><HardDrive className="w-4 h-4" /> Local Storage</span>
+            <div className="mb-6 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-white/90">{selected.name}</h2>
+                <div className="flex items-center gap-4 mt-2 text-sm text-white/50">
+                  <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {new Date(selected.createdAt).toLocaleString()}</span>
+                  <span className="flex items-center gap-1.5"><HardDrive className="w-4 h-4" /> Local Storage</span>
+                </div>
               </div>
+              <button 
+                onClick={handleDelete}
+                className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition-colors"
+                title="Delete recording"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Audio Player Card */}
@@ -190,59 +244,137 @@ export default function HistoryView() {
               </div>
             </div>
 
-            {/* Transcript Card */}
+            {/* Transcript / AI Analysis Card */}
             <div className="flex-1 bg-[#1A1A1A] border border-white/10 rounded-2xl flex flex-col overflow-hidden">
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#202020]">
-                <div className="flex items-center gap-2 font-medium text-white/80">
-                  <FileText className="w-4 h-4" /> Transcript
-                </div>
-                {!transcriptData.markdown && !transcriptData.isTranscribing && (
+                
+                <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
                   <button 
-                    onClick={handleTranscribe}
-                    className="px-4 py-1.5 text-xs font-semibold bg-white text-black rounded-lg hover:bg-white/90 transition-colors"
+                    onClick={() => setActiveTab('transcript')}
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                      activeTab === 'transcript' ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+                    )}
                   >
-                    Transcribe Audio
+                    <FileText className="w-4 h-4" /> Transcript
                   </button>
-                )}
-                {transcriptData.isTranscribing && (
-                  <div className="text-xs text-blue-400 flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing...
-                  </div>
-                )}
+                  <button 
+                    onClick={() => setActiveTab('analysis')}
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                      activeTab === 'analysis' ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+                    )}
+                  >
+                    <BrainCircuit className="w-4 h-4" /> AI Analysis
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {activeTab === 'transcript' ? (
+                    <>
+                      {!transcriptData.isTranscribing && (
+                        <button 
+                          onClick={handleTranscribe}
+                          className={clsx(
+                            "px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors",
+                            transcriptData.markdown 
+                              ? "bg-white/10 text-white hover:bg-white/20" 
+                              : "bg-white text-black hover:bg-white/90"
+                          )}
+                        >
+                          {transcriptData.markdown ? "Retranscribe" : "Transcribe Audio"}
+                        </button>
+                      )}
+                      {transcriptData.isTranscribing && (
+                        <div className="text-xs text-blue-400 flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Processing...
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {!aiData.isAnalyzing && transcriptData.markdown && (
+                        <button 
+                          onClick={handleAnalyze}
+                          className={clsx(
+                            "px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-2",
+                            aiData.analysis 
+                              ? "bg-white/10 text-white hover:bg-white/20" 
+                              : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:opacity-90 shadow-lg"
+                          )}
+                        >
+                          {aiData.analysis ? "Re-analyze" : "Generate AI Report ✨"}
+                        </button>
+                      )}
+                      {aiData.isAnalyzing && (
+                        <div className="text-xs text-purple-400 flex items-center gap-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               
               <div className="flex-1 overflow-y-auto p-6">
-                {transcriptData.markdown ? (
-                  <div className="text-white/80 text-[15px] leading-relaxed max-w-3xl whitespace-pre-wrap">
-                    {transcriptData.markdown.split(/(?:\r?\n){2,}/).map((block, i) => {
-                      const parts = block.split(/\r?\n/).filter(line => line.trim().length > 0);
-                      if (parts.length === 0) return null;
-                      
-                      if (parts.length === 1) {
+                {activeTab === 'transcript' ? (
+                  transcriptData.markdown ? (
+                    <div className="text-white/80 text-[15px] leading-relaxed max-w-4xl mx-auto w-full flex flex-col space-y-6">
+                      {transcriptData.markdown.split(/(?:\r?\n){2,}/).map((block, i) => {
+                        const parts = block.split(/\r?\n/).filter(line => line.trim().length > 0);
+                        if (parts.length === 0) return null;
+                        
+                        if (parts.length === 1) {
+                          return (
+                            <div key={i} className="flex w-full justify-center">
+                              <div className="bg-white/5 text-white/40 text-xs px-3 py-1.5 rounded-full">
+                                {parts[0]}
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        const [heading, ...body] = parts;
+                        const rawHeading = heading.replace(/\*\*/g, '').trim();
+                        const isSelf = rawHeading.includes('Speaker 0');
+                        
                         return (
-                          <div key={i} className="mb-6">
-                            {parts[0]}
+                          <div key={i} className={clsx("flex w-full", isSelf ? "justify-end" : "justify-start")}>
+                            <div className={clsx(
+                              "max-w-[80%] md:max-w-[70%] rounded-2xl p-4 shadow-sm",
+                              isSelf 
+                                ? "bg-orange-500/10 border border-orange-500/20 text-orange-50 rounded-tr-sm" 
+                                : "bg-[#262626] border border-white/5 text-white/90 rounded-tl-sm"
+                            )}>
+                              <div className={clsx(
+                                "text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between gap-4",
+                                isSelf ? "text-orange-400/80" : "text-white/40"
+                              )}>
+                                <span>{isSelf ? 'You' : rawHeading.split('(')[0].trim()}</span>
+                                <span className="opacity-60 font-mono tracking-normal">{rawHeading.match(/\((.*?)\)/)?.[1]}</span>
+                              </div>
+                              <div className="text-[14px] leading-relaxed">
+                                {body.join(' ').trim()}
+                              </div>
+                            </div>
                           </div>
-                        );
-                      }
-                      
-                      const [heading, ...body] = parts;
-                      return (
-                        <div key={i} className="mb-6">
-                          <div className="text-blue-400 text-[11px] font-bold uppercase tracking-wider mb-1.5">
-                            {heading.replace(/\*\*/g, '')}
-                          </div>
-                          <div>
-                            {body.join(' ').trim()}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-white/30 text-sm">
+                      {transcriptData.status || "Click transcribe to generate text from audio."}
+                    </div>
+                  )
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-white/30 text-sm">
-                    {transcriptData.status || "Click transcribe to generate text from audio."}
-                  </div>
+                  // AI Analysis Tab
+                  aiData.analysis ? (
+                    <AIAnalysis analysis={aiData.analysis} />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-white/30 text-sm">
+                      {aiData.status || (transcriptData.markdown ? "Ready to generate AI report." : "Transcript required before analysis.")}
+                    </div>
+                  )
                 )}
               </div>
             </div>

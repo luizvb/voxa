@@ -1,9 +1,25 @@
 import { HelpCircle, Settings, Command, MousePointer2, Sparkles, Book, Mic } from 'lucide-react';
 import { useRecorder } from '../hooks/useRecorder';
 import clsx from 'clsx';
+import { useEffect } from 'react';
 
 export default function Dashboard() {
   const { isRecording, status, formattedTime, startRecording, stopRecording } = useRecorder();
+
+  useEffect(() => {
+    const handleShortcut = () => {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    };
+
+    window.recorder.onShortcutRecord(handleShortcut);
+    return () => {
+      window.recorder.removeShortcutRecord(handleShortcut);
+    };
+  }, [isRecording, startRecording, stopRecording]);
 
   return (
     <div className="max-w-4xl mx-auto text-[#E2E8F0] space-y-10">
@@ -73,7 +89,10 @@ export default function Dashboard() {
                 <Command className="w-3 h-3" />
               </kbd>
               <kbd className="h-6 px-2 rounded bg-white/10 text-xs font-sans flex items-center justify-center border border-white/5">
-                Space
+                Shift
+              </kbd>
+              <kbd className="h-6 px-2 rounded bg-white/10 text-xs font-sans flex items-center justify-center border border-white/5">
+                R
               </kbd>
             </div>
           </button>
@@ -85,7 +104,7 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="font-semibold text-white/90 text-[15px]">Customize your shortcuts</div>
-              <div className="text-sm text-white/50 mt-0.5">Change the keyboard shortcuts for VoiceDesk.</div>
+              <div className="text-sm text-white/50 mt-0.5">Change the keyboard shortcuts for Voxa.</div>
             </div>
           </button>
 
@@ -107,7 +126,7 @@ export default function Dashboard() {
             </div>
             <div>
               <div className="font-semibold text-white/90 text-[15px]">Add vocabulary</div>
-              <div className="text-sm text-white/50 mt-0.5">Teach VoiceDesk custom words, names, or industry terms.</div>
+              <div className="text-sm text-white/50 mt-0.5">Teach Voxa custom words, names, or industry terms.</div>
             </div>
           </button>
         </div>

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 
-	"bidirectional-voice-recorder/internal/audio"
-	"bidirectional-voice-recorder/internal/capture"
-	"bidirectional-voice-recorder/internal/recorder"
+	"voxa/internal/audio"
+	"voxa/internal/capture"
+	"voxa/internal/recorder"
 )
 
 type probeResponse struct {

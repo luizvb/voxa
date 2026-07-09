@@ -4,7 +4,7 @@ import (
 	"io"
 	"math"
 
-	"bidirectional-voice-recorder/internal/audio"
+	"voxa/internal/audio"
 )
 
 type SimulatedPair struct {

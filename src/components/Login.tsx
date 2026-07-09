@@ -1,15 +1,16 @@
-import { Mic, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { Logo } from './Logo';
 
 export default function Login({ onLogin }: { onLogin: () => void }) {
   return (
-    <div className="w-full max-w-md p-8 bg-card rounded-2xl border border-white/10 shadow-2xl flex flex-col items-center">
-      <div className="w-16 h-16 bg-gradient-to-br from-[#00F2FE] to-[#4FACFE] rounded-2xl flex items-center justify-center mb-6 shadow-[0_4px_16px_rgba(79,172,254,0.3)]">
-        <Mic className="w-8 h-8 text-black" />
+    <div className="w-full max-w-md p-8 glass rounded-2xl shadow-2xl flex flex-col items-center">
+      <div className="mb-6 shadow-[0_4px_32px_rgba(0,229,255,0.2)] rounded-full p-2 bg-black/50 border border-white/5">
+        <Logo className="w-12 h-12" />
       </div>
       
-      <h1 className="text-2xl font-bold mb-2">Welcome to VoiceDesk</h1>
+      <h1 className="text-2xl font-bold mb-2">Welcome to Voxa</h1>
       <p className="text-muted-foreground text-center mb-8">
-        Your bidirectional voice recorder for macOS. Sign in to sync your sessions.
+        The intelligence behind every conversation. Sign in to sync your sessions.
       </p>
 
       <div className="w-full space-y-4">
@@ -35,7 +36,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
 
         <button 
           onClick={onLogin}
-          className="w-full h-10 mt-4 bg-foreground text-background font-semibold rounded-lg flex items-center justify-center gap-2 hover:bg-foreground/90 transition-colors"
+          className="w-full h-10 mt-4 bg-gradient-to-r from-primary to-accent text-white font-semibold rounded-lg flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(180,0,255,0.3)]"
         >
           Sign In
           <ArrowRight className="w-4 h-4" />

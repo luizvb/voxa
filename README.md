@@ -1,89 +1,103 @@
-# Bidirectional Voice Recorder
+# Voxa
 
-macOS Electron app with a Go sidecar for recording microphone and system audio sessions.
+*The intelligence behind every conversation.*
 
-## Features
+## O que é
 
-- Record microphone audio.
-- Optionally include system audio through Electron desktop capture when macOS permissions allow it.
-- Mix microphone and system audio into a single playable WebM recording.
-- Save recordings locally with metadata.
-- Browse recording history inside the app.
-- Replay previous recordings with the built-in audio player.
-- Transcribe selected recordings with Deepgram Nova-3 speaker diarization.
-- Toggle Standard or Max quality transcription for future freemium tiers.
-- Use the Go sidecar for deterministic recorder tests and WAV artifact generation.
+Voxa é uma plataforma de inteligência conversacional baseada em IA que transforma qualquer conversa em conhecimento acionável.
 
-## Architecture
+Ela grava conversas localmente no macOS, identifica automaticamente quem está falando, transcreve com alta precisão, analisa a comunicação utilizando IA e gera insights que ajudam pessoas e empresas a entender melhor suas interações.
 
-```text
-Electron renderer
-  -> MediaRecorder + Web Audio mix
-  -> Electron main process
-  -> local recording store
-  -> Deepgram transcription + diarization
-  -> Go sidecar recorderd for CLI/testable recorder engine
-```
+Não importa se é uma entrevista, uma reunião, uma negociação, uma venda ou uma conversa de feedback. A Voxa entende o contexto e entrega inteligência sobre o que realmente aconteceu.
 
-Go is used for the recorder engine, session model, WAV writing, CLI sidecar, and deterministic tests. macOS system-audio capture remains isolated behind a driver boundary because the production-grade path depends on Apple Core Audio Tap permissions and runtime behavior.
+## Posicionamento
 
-## Run
+**Voxa is an AI Conversation Intelligence Platform.**
+
+Não é apenas um gravador de reuniões. É uma plataforma capaz de compreender, analisar e evoluir a forma como as pessoas se comunicam.
+
+## Brand Statement
+
+Every important conversation contains knowledge.
+Meetings shape strategies.
+Interviews reveal talent.
+Sales calls uncover opportunities.
+Feedback builds better teams.
+
+But once the conversation ends, most of that knowledge disappears.
+Voxa captures it, understands it and turns it into intelligence.
+So every conversation becomes searchable, actionable and impossible to forget.
+
+## Missão
+
+Ajudar pessoas e empresas a tomar melhores decisões através da compreensão profunda das conversas.
+
+## Visão
+
+Ser a plataforma de inteligência conversacional mais utilizada do mundo, tornando toda conversa pesquisável, compreensível e útil.
+
+## Proposta de valor
+
+Cada conversa contém conhecimento valioso. A Voxa garante que nenhuma informação importante seja perdida. Ela transforma voz em memória, memória em conhecimento e conhecimento em ação.
+
+## Principais funcionalidades
+
+* 🎙️ Gravação nativa para macOS
+* 👥 Identificação automática de speakers (diarization)
+* 📝 Transcrição em tempo real ou pós-processamento
+* 🧠 IA para compreender o contexto da conversa
+* 💬 Resumos automáticos
+* 📌 Extração de decisões, tarefas e próximos passos
+* 😊 Análise de comunicação e comportamento
+* 📊 Métricas de participação por pessoa
+* 🔍 Busca semântica em todas as conversas
+* 🏷️ Organização automática por projetos, clientes ou reuniões
+* 🤖 Coach de comunicação com feedback personalizado
+
+## Diferencial
+
+Enquanto outras ferramentas apenas gravam reuniões, a Voxa compreende o significado das conversas. Ela identifica padrões, comportamento, oportunidades e conhecimento que normalmente passam despercebidos.
+
+A gravação é apenas o início. O verdadeiro produto é a inteligência.
+
+## Casos de uso
+
+**Reuniões**: Resumos automáticos, Decisões, Action items, Follow-ups
+**Entrevistas**: Comparação entre candidatos, Análise técnica
+**Comunicação**: Score automático
+**Vendas**: Identificação de objeções, Tempo de fala, Técnicas utilizadas, Oportunidades perdidas
+**Liderança & Feedbacks**: One-on-ones, Desenvolvimento de equipes
+**Customer Success**: Análise de satisfação, Riscos de churn, Sentimento do cliente
+
+## Público-alvo
+
+* Executivos e Gestores
+* Recruiters e Equipes comerciais
+* Product Managers
+* Customer Success e Consultores
+* Empresas que dependem de conversas para gerar valor
+
+## Run (Development)
 
 Install dependencies:
-
 ```bash
 npm install
 ```
 
 Start the Electron app:
-
 ```bash
 cp .env.example .env
 # edit .env and set DEEPGRAM_API_KEY
 npm run dev
 ```
 
-The first recording may trigger macOS microphone and screen/system-audio prompts. If system audio capture fails in development mode, uncheck `Include system audio` to validate microphone recording, history, and playback first.
+## Architecture & Under the hood
 
-## Transcription
+Electron app with a Go sidecar (`recorderd`) for recording microphone and system audio sessions.
 
-Select a recording in History, choose a quality mode, and click `Transcribe selected`.
-
-- Standard: Deepgram `nova-3`, `diarize_model=latest`, smart formatting, punctuation.
-- Max quality: Standard plus paragraphs, utterances, and language detection.
-
-The app stores transcript artifacts next to each recording:
-
-- `transcript.deepgram.json`
-- `transcript.md`
-
-Go sidecar smoke:
-
-```bash
-npm run build:go
-./bin/recorderd probe
-./bin/recorderd record-simulated --out ./tmp/session --seconds 2
+```text
+Electron renderer -> MediaRecorder + Web Audio mix -> Electron main process -> local recording store -> Deepgram transcription -> Go sidecar
 ```
-
-## Test
-
-```bash
-npm run test:all
-```
-
-## Project Docs
-
-- `docs/DISCOVERY.md` documents the macOS audio-capture research.
-- `docs/PLAN.md` describes the implementation milestones and test plan.
-
-## macOS Capture Path
-
-The production driver should use one of two capture paths:
-
-- Electron/Chromium loopback via `desktopCapturer` for faster prototype, accepting screen/system-audio permission caveats.
-- Native Core Audio Tap helper for cleaner system-audio capture on macOS 14.2+ and better raw PCM ownership.
-
-See `docs/DISCOVERY.md` and `docs/PLAN.md`.
 
 ## License
 
