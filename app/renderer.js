@@ -11,7 +11,7 @@ const timer = document.getElementById('timer');
 const player = document.getElementById('player');
 const historyList = document.getElementById('historyList');
 
-let recorder;
+let mediaRecorder;
 let chunks = [];
 let streams = [];
 let startedAt = 0;
@@ -83,8 +83,8 @@ async function createCaptureStream() {
       const system = await navigator.mediaDevices.getDisplayMedia({
         audio: true,
         video: {
-          width: 4,
-          height: 4,
+          width: 16,
+          height: 16,
           frameRate: 1
         }
       });
@@ -145,7 +145,7 @@ async function refreshHistory(selectId) {
 
 async function finishRecording() {
   const durationMs = Date.now() - startedAt;
-  const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+  const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
   const bytes = await blob.arrayBuffer();
   const saved = await window.recorder.saveRecording({
     name: sessionName.value || 'Untitled recording',
@@ -197,19 +197,19 @@ start.addEventListener('click', async () => {
     chunks = [];
     const capture = await createCaptureStream();
     const mimeType = preferredMimeType();
-    recorder = new MediaRecorder(capture.stream, mimeType ? { mimeType } : undefined);
+    mediaRecorder = new MediaRecorder(capture.stream, mimeType ? { mimeType } : undefined);
 
-    recorder.addEventListener('dataavailable', (event) => {
+    mediaRecorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) chunks.push(event.data);
     });
-    recorder.addEventListener('stop', () => {
+    mediaRecorder.addEventListener('stop', () => {
       finishRecording().catch((error) => {
         show({ error: error.message });
         setStatus('Save failed');
       }).finally(stopStreams);
     });
 
-    recorder.start(1000);
+    mediaRecorder.start(1000);
     stop.disabled = false;
     setStatus(capture.warnings.length > 0 ? capture.warnings.join(' ') : activeMode === 'mic+system' ? 'Recording microphone + system audio' : 'Recording microphone');
     startTimer();
@@ -224,13 +224,13 @@ start.addEventListener('click', async () => {
 });
 
 stop.addEventListener('click', () => {
-  if (!recorder || recorder.state === 'inactive') return;
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
   stop.disabled = true;
   start.disabled = false;
   includeSystem.disabled = false;
   stopTimer();
   setStatus('Saving');
-  recorder.stop();
+  mediaRecorder.stop();
 });
 
 refreshHistory().catch((error) => {

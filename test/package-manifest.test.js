@@ -35,5 +35,9 @@ test('renderer page allows local media playback and loads recorder controls', ()
   assert.match(renderer, /Preparing recording permissions/);
   assert.match(renderer, /System audio unavailable; recording microphone only/);
   assert.match(renderer, /audioContext.resume/);
+  assert.match(renderer, /width: 16/);
+  assert.match(renderer, /height: 16/);
   assert.match(renderer, /mode: activeMode/);
+  assert.doesNotMatch(renderer, /\blet recorder\b/);
+  assert.match(renderer, /\blet mediaRecorder\b/);
 });
