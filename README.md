@@ -2,19 +2,19 @@
 
 *The intelligence behind every conversation.*
 
-## O que é
+## What is it
 
-Voxa é uma plataforma de inteligência conversacional baseada em IA que transforma qualquer conversa em conhecimento acionável.
+Voxa is an AI-powered conversational intelligence platform that transforms any conversation into actionable knowledge.
 
-Ela grava conversas localmente no macOS, identifica automaticamente quem está falando, transcreve com alta precisão, analisa a comunicação utilizando IA e gera insights que ajudam pessoas e empresas a entender melhor suas interações.
+It records conversations locally on macOS, automatically identifies who is speaking, transcribes with high accuracy, analyzes communication using AI, and generates insights that help people and businesses better understand their interactions.
 
-Não importa se é uma entrevista, uma reunião, uma negociação, uma venda ou uma conversa de feedback. A Voxa entende o contexto e entrega inteligência sobre o que realmente aconteceu.
+Whether it's an interview, a meeting, a negotiation, a sales call, or a feedback session, Voxa understands the context and delivers intelligence on what really happened.
 
-## Posicionamento
+## Positioning
 
 **Voxa is an AI Conversation Intelligence Platform.**
 
-Não é apenas um gravador de reuniões. É uma plataforma capaz de compreender, analisar e evoluir a forma como as pessoas se comunicam.
+It is not just a meeting recorder. It is a platform capable of understanding, analyzing, and evolving the way people communicate.
 
 ## Brand Statement
 
@@ -25,57 +25,57 @@ Sales calls uncover opportunities.
 Feedback builds better teams.
 
 But once the conversation ends, most of that knowledge disappears.
-Voxa captures it, understands it and turns it into intelligence.
-So every conversation becomes searchable, actionable and impossible to forget.
+Voxa captures it, understands it, and turns it into intelligence.
+So every conversation becomes searchable, actionable, and impossible to forget.
 
-## Missão
+## Mission
 
-Ajudar pessoas e empresas a tomar melhores decisões através da compreensão profunda das conversas.
+To help people and businesses make better decisions through a deep understanding of conversations.
 
-## Visão
+## Vision
 
-Ser a plataforma de inteligência conversacional mais utilizada do mundo, tornando toda conversa pesquisável, compreensível e útil.
+To be the most widely used conversational intelligence platform in the world, making every conversation searchable, understandable, and useful.
 
-## Proposta de valor
+## Value Proposition
 
-Cada conversa contém conhecimento valioso. A Voxa garante que nenhuma informação importante seja perdida. Ela transforma voz em memória, memória em conhecimento e conhecimento em ação.
+Every conversation contains valuable knowledge. Voxa ensures no important information is lost. It transforms voice into memory, memory into knowledge, and knowledge into action.
 
-## Principais funcionalidades
+## Key Features
 
-* 🎙️ Gravação nativa para macOS
-* 👥 Identificação automática de speakers (diarization)
-* 📝 Transcrição em tempo real ou pós-processamento
-* 🧠 IA para compreender o contexto da conversa
-* 💬 Resumos automáticos
-* 📌 Extração de decisões, tarefas e próximos passos
-* 😊 Análise de comunicação e comportamento
-* 📊 Métricas de participação por pessoa
-* 🔍 Busca semântica em todas as conversas
-* 🏷️ Organização automática por projetos, clientes ou reuniões
-* 🤖 Coach de comunicação com feedback personalizado
+* 🎙️ Native macOS recording
+* 👥 Automatic speaker identification (diarization)
+* 📝 Real-time or post-processing transcription
+* 🧠 AI to understand conversational context
+* 💬 Automatic summaries
+* 📌 Extraction of decisions, tasks, and next steps
+* 😊 Communication and behavior analysis
+* 📊 Participation metrics per person
+* 🔍 Semantic search across all conversations
+* 🏷️ Automatic organization by projects, clients, or meetings
+* 🤖 Communication coach with personalized feedback
 
-## Diferencial
+## Differentiator
 
-Enquanto outras ferramentas apenas gravam reuniões, a Voxa compreende o significado das conversas. Ela identifica padrões, comportamento, oportunidades e conhecimento que normalmente passam despercebidos.
+While other tools only record meetings, Voxa understands the meaning of conversations. It identifies patterns, behavior, opportunities, and knowledge that normally go unnoticed.
 
-A gravação é apenas o início. O verdadeiro produto é a inteligência.
+Recording is just the beginning. The real product is intelligence.
 
-## Casos de uso
+## Use Cases
 
-**Reuniões**: Resumos automáticos, Decisões, Action items, Follow-ups
-**Entrevistas**: Comparação entre candidatos, Análise técnica
-**Comunicação**: Score automático
-**Vendas**: Identificação de objeções, Tempo de fala, Técnicas utilizadas, Oportunidades perdidas
-**Liderança & Feedbacks**: One-on-ones, Desenvolvimento de equipes
-**Customer Success**: Análise de satisfação, Riscos de churn, Sentimento do cliente
+**Meetings**: Automatic summaries, Decisions, Action items, Follow-ups
+**Interviews**: Candidate comparison, Technical analysis
+**Communication**: Automatic scoring
+**Sales**: Objection identification, Talk time, Techniques used, Missed opportunities
+**Leadership & Feedback**: One-on-ones, Team development
+**Customer Success**: Satisfaction analysis, Churn risks, Customer sentiment
 
-## Público-alvo
+## Target Audience
 
-* Executivos e Gestores
-* Recruiters e Equipes comerciais
+* Executives and Managers
+* Recruiters and Commercial teams
 * Product Managers
-* Customer Success e Consultores
-* Empresas que dependem de conversas para gerar valor
+* Customer Success and Consultants
+* Companies that rely on conversations to generate value
 
 ## Run (Development)
 

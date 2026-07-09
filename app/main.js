@@ -145,9 +145,9 @@ app.whenReady().then(() => {
   createWindow();
 
   // Create Tray
-  const icon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, 'trayTemplate.png');
+  const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon);
-  tray.setTitle('🎙️');
   tray.setToolTip('Voxa');
 
   const contextMenu = Menu.buildFromTemplate([
