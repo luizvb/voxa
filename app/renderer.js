@@ -1,6 +1,4 @@
-const output = document.getElementById('output');
-const probe = document.getElementById('probe');
-const simulated = document.getElementById('simulated');
+const toggleMode = document.getElementById('toggleMode');
 const start = document.getElementById('start');
 const stop = document.getElementById('stop');
 const openFolder = document.getElementById('openFolder');
@@ -13,6 +11,11 @@ const historyList = document.getElementById('historyList');
 const recordCount = document.getElementById('recordCount');
 const captureMode = document.getElementById('captureMode');
 const storagePath = document.getElementById('storagePath');
+const aiMode = document.getElementById('aiMode');
+const maxQuality = document.getElementById('maxQuality');
+const transcribe = document.getElementById('transcribe');
+const transcriptStatus = document.getElementById('transcriptStatus');
+const transcriptOutput = document.getElementById('transcriptOutput');
 
 let mediaRecorder;
 let chunks = [];
@@ -21,9 +24,10 @@ let startedAt = 0;
 let timerHandle;
 let audioContext;
 let activeMode = 'mic';
+let selectedRecordingId;
 
 function show(value) {
-  output.textContent = JSON.stringify(value, null, 2);
+  console.log(value);
 }
 
 function setStatus(value) {
@@ -32,6 +36,14 @@ function setStatus(value) {
 
 function updateCaptureMode() {
   captureMode.textContent = includeSystem.checked ? 'Mic + System' : 'Mic only';
+}
+
+function updateAiMode() {
+  aiMode.textContent = maxQuality.checked ? 'Max' : 'Standard';
+}
+
+function setTranscriptStatus(value) {
+  transcriptStatus.querySelector('span:last-child').textContent = value;
 }
 
 function formatDuration(ms) {
@@ -69,6 +81,52 @@ function stopStreams() {
 function preferredMimeType() {
   const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'video/webm;codecs=opus', 'video/webm'];
   return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) || '';
+}
+
+function renderTranscript(markdown) {
+  transcriptOutput.classList.remove('empty');
+  transcriptOutput.innerHTML = '';
+
+  const blocks = markdown.split(/\n{2,}/).filter(Boolean);
+  if (blocks.length === 0) {
+    transcriptOutput.classList.add('empty');
+    transcriptOutput.textContent = 'No transcript text returned.';
+    return;
+  }
+
+  for (const block of blocks) {
+    const [heading, ...body] = block.split('\n');
+    const item = document.createElement('article');
+    item.className = 'transcript-block';
+    const speaker = document.createElement('strong');
+    speaker.textContent = heading.replace(/\*\*/g, '');
+    const text = document.createElement('p');
+    text.textContent = body.join(' ').trim();
+    item.append(speaker, text);
+    transcriptOutput.appendChild(item);
+  }
+}
+
+function selectRecording(recording) {
+  selectedRecordingId = recording.id;
+  transcribe.disabled = false;
+  player.src = recording.playbackUrl;
+  player.play().catch(() => {});
+  setStatus(`Playing ${recording.name}`);
+
+  if (recording.transcript) {
+    setTranscriptStatus(`Transcript saved (${recording.transcript.quality}).`);
+    window.recorder.getTranscript(recording.id).then((result) => {
+      renderTranscript(result.markdown);
+    }).catch((error) => {
+      transcriptOutput.classList.add('empty');
+      transcriptOutput.textContent = error.message;
+    });
+  } else {
+    setTranscriptStatus('Ready to transcribe selected recording.');
+    transcriptOutput.classList.add('empty');
+    transcriptOutput.textContent = 'No transcript yet.';
+  }
 }
 
 async function createCaptureStream() {
@@ -134,14 +192,13 @@ async function refreshHistory(selectId) {
     const item = document.createElement('button');
     item.className = 'history-item';
     item.type = 'button';
+    const transcriptLabel = recording.transcript ? ` · transcript ${recording.transcript.quality}` : '';
     item.innerHTML = `
       <strong>${recording.name}</strong>
-      <span>${new Date(recording.createdAt).toLocaleString()} · ${formatDuration(recording.durationMs)} · ${recording.mode}</span>
+      <span>${new Date(recording.createdAt).toLocaleString()} · ${formatDuration(recording.durationMs)} · ${recording.mode}${transcriptLabel}</span>
     `;
     item.addEventListener('click', () => {
-      player.src = recording.playbackUrl;
-      player.play().catch(() => {});
-      setStatus(`Playing ${recording.name}`);
+      selectRecording(recording);
     });
     historyList.appendChild(item);
 
@@ -169,20 +226,17 @@ async function finishRecording() {
   setStatus('Saved');
 }
 
-probe.addEventListener('click', async () => {
-  try {
-    show(await window.recorder.probe());
-  } catch (error) {
-    show({ error: error.message });
-  }
-});
-
-simulated.addEventListener('click', async () => {
-  try {
-    const root = await window.recorder.recordingsRoot();
-    show(await window.recorder.recordSimulated(`${root}/simulated-${Date.now()}`, 2));
-  } catch (error) {
-    show({ error: error.message });
+let isMinimalMode = false;
+toggleMode.addEventListener('click', () => {
+  isMinimalMode = !isMinimalMode;
+  if (isMinimalMode) {
+    document.body.classList.add('minimal-mode');
+    toggleMode.textContent = 'Panel Mode';
+    window.recorder.resizeWindow(400, 320);
+  } else {
+    document.body.classList.remove('minimal-mode');
+    toggleMode.textContent = 'Minimal Mode';
+    window.recorder.resizeWindow(860, 560);
   }
 });
 
@@ -195,6 +249,32 @@ openFolder.addEventListener('click', async () => {
 });
 
 includeSystem.addEventListener('change', updateCaptureMode);
+maxQuality.addEventListener('change', updateAiMode);
+
+transcribe.addEventListener('click', async () => {
+  if (!selectedRecordingId) return;
+
+  transcribe.disabled = true;
+  setTranscriptStatus(maxQuality.checked ? 'Running Deepgram max quality diarization...' : 'Running Deepgram diarization...');
+  transcriptOutput.classList.add('empty');
+  transcriptOutput.textContent = 'Transcribing...';
+
+  try {
+    const result = await window.recorder.transcribeWithDeepgram({
+      recordingId: selectedRecordingId,
+      maxQuality: maxQuality.checked
+    });
+    renderTranscript(result.markdown);
+    setTranscriptStatus(`Transcript saved (${result.metadata.transcript.quality}).`);
+    await refreshHistory(selectedRecordingId);
+  } catch (error) {
+    transcriptOutput.classList.add('empty');
+    transcriptOutput.textContent = error.message;
+    setTranscriptStatus('Transcription failed.');
+  } finally {
+    transcribe.disabled = false;
+  }
+});
 
 start.addEventListener('click', async () => {
   start.disabled = true;
@@ -221,6 +301,7 @@ start.addEventListener('click', async () => {
 
     mediaRecorder.start(1000);
     stop.disabled = false;
+    document.querySelector('.status-dot').classList.add('recording');
     setStatus(capture.warnings.length > 0 ? capture.warnings.join(' ') : activeMode === 'mic+system' ? 'Recording microphone + system audio' : 'Recording microphone');
     startTimer();
   } catch (error) {
@@ -239,6 +320,7 @@ stop.addEventListener('click', () => {
   start.disabled = false;
   includeSystem.disabled = false;
   stopTimer();
+  document.querySelector('.status-dot').classList.remove('recording');
   setStatus('Saving');
   mediaRecorder.stop();
 });
@@ -254,3 +336,4 @@ window.recorder.recordingsRoot().then((root) => {
 });
 
 updateCaptureMode();
+updateAiMode();

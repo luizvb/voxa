@@ -1,6 +1,7 @@
 const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell } = require('electron');
 const { spawnFile } = require('./sidecar');
-const { listRecordings, recordingsRoot, saveRecording } = require('./session-store');
+const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript } = require('./session-store');
+const { transcribeWithDeepgram } = require('./transcription-service');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -54,6 +55,29 @@ ipcMain.handle('recordings:open-folder', async () => {
   const root = recordingsRoot(app.getPath('userData'));
   await shell.openPath(root);
   return root;
+});
+
+ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
+  const recording = await getRecording(app.getPath('userData'), input.recordingId);
+  const result = await transcribeWithDeepgram({
+    apiKey: process.env.DEEPGRAM_API_KEY,
+    filePath: recording.file,
+    mimeType: recording.mimeType,
+    maxQuality: Boolean(input.maxQuality)
+  });
+
+  return saveTranscript(app.getPath('userData'), input.recordingId, result);
+});
+
+ipcMain.handle('transcriptions:get', async (_event, input) => {
+  return getTranscript(app.getPath('userData'), input.recordingId);
+});
+
+ipcMain.handle('window:resize', (event, width, height) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    win.setSize(width, height);
+  }
 });
 
 app.whenReady().then(() => {

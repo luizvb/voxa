@@ -18,7 +18,8 @@
           </div>
         </div>
         <div class="topbar-actions">
-          <span class="status-pill">Local only</span>
+          <button id="toggleMode" class="secondary-button">Minimal Mode</button>
+          <span class="status-pill">Local files</span>
           <button id="openFolder" class="secondary-button">Open folder</button>
         </div>
       </header>
@@ -36,6 +37,10 @@
           <div class="metric">
             <span>Format</span>
             <strong>WebM</strong>
+          </div>
+          <div class="metric">
+            <span>AI</span>
+            <strong id="aiMode">Standard</strong>
           </div>
         </section>
 
@@ -81,6 +86,27 @@
           </section>
         </section>
 
+        <section class="panel transcript-panel">
+          <div class="panel-header">
+            <div>
+              <h2>AI transcript</h2>
+              <p>Deepgram diarization separates speakers by voice; transcript artifacts are saved locally.</p>
+            </div>
+          </div>
+          <div class="transcript-controls">
+            <label class="toggle-row">
+              <input id="maxQuality" type="checkbox" />
+              <span>Max quality</span>
+            </label>
+            <button id="transcribe" class="primary-button" disabled>Transcribe selected</button>
+          </div>
+          <div id="transcriptStatus" class="status-line">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Select a recording to transcribe.</span>
+          </div>
+          <div id="transcriptOutput" class="transcript-output empty">No transcript yet.</div>
+        </section>
+
         <section class="panel history-panel">
           <div class="panel-header">
             <div>
@@ -91,14 +117,6 @@
           <div id="historyList" class="history-list"></div>
         </section>
 
-        <details class="diagnostics-panel">
-          <summary>Developer diagnostics</summary>
-          <div class="diagnostics-actions">
-            <button id="probe" class="secondary-button">Probe Go sidecar</button>
-            <button id="simulated" class="secondary-button">Create simulated WAV session</button>
-          </div>
-          <pre id="output" aria-live="polite"></pre>
-        </details>
       </main>
     </div>
     <script src="./renderer.js"></script>

@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
-const { listRecordings, recordingsRoot, saveRecording } = require('../app/session-store');
+const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript } = require('../app/session-store');
 
 test('session store saves a recording with metadata and lists newest first', async () => {
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-store-'));
@@ -46,4 +46,28 @@ test('session store ignores incomplete session directories', async () => {
 
   const recordings = await listRecordings(userDataPath);
   assert.deepEqual(recordings, []);
+});
+
+test('session store saves transcript artifacts and metadata', async () => {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'recorder-store-'));
+  await saveRecording(userDataPath, {
+    id: 'session-with-transcript',
+    name: 'Interview',
+    bytes: Buffer.from('audio')
+  });
+
+  const result = await saveTranscript(userDataPath, 'session-with-transcript', {
+    provider: 'deepgram',
+    quality: 'max',
+    transcript: { results: { utterances: [] } },
+    markdown: '**Speaker 0** (00:00)\nHello'
+  });
+
+  const updated = await getRecording(userDataPath, 'session-with-transcript');
+  const transcript = await getTranscript(userDataPath, 'session-with-transcript');
+  assert.equal(result.metadata.transcript.quality, 'max');
+  assert.equal(updated.transcript.provider, 'deepgram');
+  assert.match(transcript.markdown, /Speaker 0/);
+  assert.equal(fs.existsSync(updated.transcript.jsonFile), true);
+  assert.equal(fs.existsSync(updated.transcript.markdownFile), true);
 });

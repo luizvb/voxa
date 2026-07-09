@@ -6,5 +6,8 @@ contextBridge.exposeInMainWorld('recorder', {
   recordingsRoot: () => ipcRenderer.invoke('recordings:root'),
   listRecordings: () => ipcRenderer.invoke('recordings:list'),
   saveRecording: (recording) => ipcRenderer.invoke('recordings:save', recording),
-  openRecordingsFolder: () => ipcRenderer.invoke('recordings:open-folder')
+  openRecordingsFolder: () => ipcRenderer.invoke('recordings:open-folder'),
+  transcribeWithDeepgram: (input) => ipcRenderer.invoke('transcriptions:deepgram', input),
+  getTranscript: (recordingId) => ipcRenderer.invoke('transcriptions:get', { recordingId }),
+  resizeWindow: (width, height) => ipcRenderer.invoke('window:resize', width, height)
 });

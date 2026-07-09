@@ -10,6 +10,8 @@ macOS Electron app with a Go sidecar for recording microphone and system audio s
 - Save recordings locally with metadata.
 - Browse recording history inside the app.
 - Replay previous recordings with the built-in audio player.
+- Transcribe selected recordings with Deepgram Nova-3 speaker diarization.
+- Toggle Standard or Max quality transcription for future freemium tiers.
 - Use the Go sidecar for deterministic recorder tests and WAV artifact generation.
 
 ## Architecture
@@ -19,6 +21,7 @@ Electron renderer
   -> MediaRecorder + Web Audio mix
   -> Electron main process
   -> local recording store
+  -> Deepgram transcription + diarization
   -> Go sidecar recorderd for CLI/testable recorder engine
 ```
 
@@ -35,10 +38,23 @@ npm install
 Start the Electron app:
 
 ```bash
+export DEEPGRAM_API_KEY="your_deepgram_key"
 npm run dev
 ```
 
 The first recording may trigger macOS microphone and screen/system-audio prompts. If system audio capture fails in development mode, uncheck `Include system audio` to validate microphone recording, history, and playback first.
+
+## Transcription
+
+Select a recording in History, choose a quality mode, and click `Transcribe selected`.
+
+- Standard: Deepgram `nova-3`, `diarize_model=latest`, smart formatting, punctuation.
+- Max quality: Standard plus paragraphs, utterances, and language detection.
+
+The app stores transcript artifacts next to each recording:
+
+- `transcript.deepgram.json`
+- `transcript.md`
 
 Go sidecar smoke:
 
