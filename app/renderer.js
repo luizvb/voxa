@@ -10,6 +10,9 @@ const statusText = document.getElementById('status');
 const timer = document.getElementById('timer');
 const player = document.getElementById('player');
 const historyList = document.getElementById('historyList');
+const recordCount = document.getElementById('recordCount');
+const captureMode = document.getElementById('captureMode');
+const storagePath = document.getElementById('storagePath');
 
 let mediaRecorder;
 let chunks = [];
@@ -25,6 +28,10 @@ function show(value) {
 
 function setStatus(value) {
   statusText.textContent = value;
+}
+
+function updateCaptureMode() {
+  captureMode.textContent = includeSystem.checked ? 'Mic + System' : 'Mic only';
 }
 
 function formatDuration(ms) {
@@ -113,6 +120,7 @@ async function createCaptureStream() {
 async function refreshHistory(selectId) {
   const recordings = await window.recorder.listRecordings();
   historyList.innerHTML = '';
+  recordCount.textContent = String(recordings.length);
 
   if (recordings.length === 0) {
     const empty = document.createElement('p');
@@ -186,6 +194,8 @@ openFolder.addEventListener('click', async () => {
   }
 });
 
+includeSystem.addEventListener('change', updateCaptureMode);
+
 start.addEventListener('click', async () => {
   start.disabled = true;
   stop.disabled = true;
@@ -236,3 +246,11 @@ stop.addEventListener('click', () => {
 refreshHistory().catch((error) => {
   show({ error: error.message });
 });
+
+window.recorder.recordingsRoot().then((root) => {
+  storagePath.textContent = root;
+}).catch(() => {
+  storagePath.textContent = 'Recordings are stored locally.';
+});
+
+updateCaptureMode();

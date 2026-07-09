@@ -29,9 +29,15 @@ test('renderer page allows local media playback and loads recorder controls', ()
   assert.match(html, /id="start"/);
   assert.match(html, />Record</);
   assert.match(html, /id="historyList"/);
+  assert.match(html, /id="recordCount"/);
+  assert.match(html, /id="captureMode"/);
+  assert.match(html, /id="storagePath"/);
+  assert.match(html, /VoiceDesk/);
   assert.match(html, /<audio id="player" controls>/);
   assert.match(preload, /saveRecording/);
   assert.match(preload, /listRecordings/);
+  assert.match(renderer, /updateCaptureMode/);
+  assert.match(renderer, /recordCount\.textContent/);
   assert.match(renderer, /Preparing recording permissions/);
   assert.match(renderer, /System audio unavailable; recording microphone only/);
   assert.match(renderer, /audioContext.resume/);
