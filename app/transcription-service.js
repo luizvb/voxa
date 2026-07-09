@@ -7,14 +7,13 @@ function createDeepgramUrl(options = {}) {
     model: 'nova-3',
     diarize_model: 'latest',
     smart_format: 'true',
-    punctuate: 'true'
+    punctuate: 'true',
+    detect_language: 'true',
+    paragraphs: 'true',
+    utterances: 'true',
+    diarize: 'true',
+    multichannel: 'true'
   });
-
-  if (options.maxQuality) {
-    params.set('paragraphs', 'true');
-    params.set('utterances', 'true');
-    params.set('detect_language', 'true');
-  }
 
   return `${DEEPGRAM_ENDPOINT}?${params.toString()}`;
 }

@@ -3,16 +3,22 @@ const { loadEnvFile } = require('./env-loader');
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
-const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell, protocol, net } = require('electron');
 const { spawnFile } = require('./sidecar');
 const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript } = require('./session-store');
 const { transcribeWithDeepgram } = require('./transcription-service');
 const { pathToFileURL } = require('node:url');
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'local-media', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
+]);
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 860,
     height: 560,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -20,7 +26,11 @@ function createWindow() {
     }
   });
 
-  win.loadFile(path.join(__dirname, 'index.html'));
+  if (process.env.NODE_ENV === 'development') {
+    win.loadURL('http://localhost:5173');
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 }
 
 ipcMain.handle('recorder:probe', async () => {
@@ -39,7 +49,7 @@ ipcMain.handle('recordings:list', async () => {
   const recordings = await listRecordings(app.getPath('userData'));
   return recordings.map((recording) => ({
     ...recording,
-    playbackUrl: pathToFileURL(recording.file).toString()
+    playbackUrl: `local-media://${recording.file}`
   }));
 });
 
@@ -51,7 +61,7 @@ ipcMain.handle('recordings:save', async (_event, input) => {
 
   return {
     ...metadata,
-    playbackUrl: pathToFileURL(metadata.file).toString()
+    playbackUrl: `local-media://${metadata.file}`
   };
 });
 
@@ -85,6 +95,10 @@ ipcMain.handle('window:resize', (event, width, height) => {
 });
 
 app.whenReady().then(() => {
+  protocol.handle('local-media', (request) => {
+    return net.fetch('file://' + request.url.replace('local-media://', ''));
+  });
+
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).then((sources) => {
       callback({ video: sources[0], audio: 'loopback' });

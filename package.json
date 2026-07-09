@@ -24,14 +24,29 @@
   "main": "app/main.js",
   "scripts": {
     "build:go": "go build -o bin/recorderd ./cmd/recorderd",
-    "dev": "npm run build:go && electron .",
+    "dev:vite": "vite",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev": "npm run build:go && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "build:react": "vite build",
+    "build:all": "npm run build:go && npm run build:react",
     "test": "node --test test/*.test.js",
     "test:go": "go test ./...",
     "test:all": "npm run test:go && npm test"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.2",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
     "electron": "^43.1.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4"
   },
   "build": {
     "appId": "com.luizneto.bidirectional-voice-recorder",
@@ -48,5 +63,12 @@
         "NSAudioCaptureUsageDescription": "This app records system audio so both sides of a call can be captured."
       }
     }
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.24.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.6.0"
   }
 }
