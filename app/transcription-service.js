@@ -5,7 +5,6 @@ const DEEPGRAM_ENDPOINT = 'https://api.deepgram.com/v1/listen';
 function createDeepgramUrl(options = {}) {
   const params = new URLSearchParams({
     model: 'nova-3',
-    diarize_model: 'latest',
     smart_format: 'true',
     punctuate: 'true',
     detect_language: 'true',
