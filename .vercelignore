@@ -1,0 +1,12 @@
+node_modules/
+release/
+release-assets/
+dist/
+bin/
+tmp/
+.git/
+.env*
+backend/node_modules/
+backend/dist/
+backend/.env*
+backend/.vercel/

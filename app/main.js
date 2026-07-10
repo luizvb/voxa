@@ -6,7 +6,7 @@ const { startRendererServer } = require('./renderer-server');
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
-const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell, protocol, net, Tray, Menu, globalShortcut, nativeImage } = require('electron');
+const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, session, shell, protocol, net, Tray, Menu, globalShortcut, nativeImage } = require('electron');
 const { upload } = app.isPackaged
   ? require(path.join(process.resourcesPath, 'blob-client.cjs'))
   : require('@vercel/blob/client');
@@ -26,6 +26,7 @@ const SHORTCUT_OPTIONS = process.platform === 'darwin'
 let recordShortcut = DEFAULT_RECORD_SHORTCUT;
 let registeredRecordShortcut = null;
 const { spawnFile } = require('./sidecar');
+const { buildAnalysisReportHtml } = require('./report-export');
 const API_URL = resolveApiUrl();
 const API_TIMEOUT_MS = 20_000;
 const { pathToFileURL } = require('node:url');
@@ -277,7 +278,11 @@ ipcMain.handle('recordings:open-folder', async () => {
 });
 
 ipcMain.handle('recordings:delete', async (_event, id) => {
-  // Mocked for now, needs backend endpoint if requested later
+  const response = await fetchApi(`/api/recordings/${id}`, {
+    method: 'DELETE',
+    headers: { 'x-user-id': 'local-user' }
+  });
+  if (!response.ok && response.status !== 404) throw new Error('Could not delete recording');
   return true;
 });
 
@@ -341,26 +346,69 @@ ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
 });
 
 ipcMain.handle('transcriptions:get', async (_event, input) => {
-  // Since we don't have a GET endpoint for transcripts right now, return empty or throw
-  // Normally the transcript is returned by the POST or via the list recordings
-  return { markdown: '' };
+  const response = await fetchApi(`/api/recordings/${input.recordingId}/transcript`, {
+    headers: { 'x-user-id': input.userId || 'local-user' }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Could not load transcript');
+  return response.json();
 });
 
 ipcMain.handle('llm:analyze', async (_event, input) => {
   const response = await fetchApi(`/api/recordings/${input.recordingId}/analyze`, {
     method: 'POST',
-    headers: { 'x-user-id': input.userId || 'local-user' }
+    signal: AbortSignal.timeout(120_000),
+    headers: {
+      'Content-Type': 'application/json',
+      'x-user-id': input.userId || 'local-user'
+    },
+    body: JSON.stringify({
+      modes: input.modes,
+      outputLanguage: input.outputLanguage,
+      context: input.context
+    })
   });
 
   if (!response.ok) {
-    throw new Error('Analysis failed');
+    const errorBody = await response.text();
+    throw new Error(`Analysis failed: ${errorBody || response.statusText}`);
   }
 
   return response.json();
 });
 
 ipcMain.handle('llm:get-analysis', async (_event, input) => {
-  return null; // Mocked
+  const response = await fetchApi(`/api/recordings/${input.recordingId}/analysis`, {
+    headers: { 'x-user-id': input.userId || 'local-user' }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Could not load analysis');
+  return response.json();
+});
+
+ipcMain.handle('reports:analysis-pdf', async (_event, input) => {
+  const suggestedName = `${safePathSegment(input.recording?.name || 'voxa-report')}-report.pdf`;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export Voxa report',
+    defaultPath: path.join(app.getPath('documents'), suggestedName),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  const reportWindow = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  try {
+    const html = buildAnalysisReportHtml(input);
+    await reportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const pdf = await reportWindow.webContents.printToPDF({
+      pageSize: 'A4',
+      printBackground: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    await fs.writeFile(result.filePath, pdf);
+    return { canceled: false, filePath: result.filePath };
+  } finally {
+    reportWindow.destroy();
+  }
 });
 
 ipcMain.handle('window:resize', (event, width, height) => {

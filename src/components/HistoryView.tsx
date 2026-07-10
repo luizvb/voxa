@@ -4,10 +4,12 @@ import {
   ArrowLeft,
   BrainCircuit,
   CalendarDays,
+  Check,
   CheckCircle2,
   Clock3,
   FileAudio,
   FileText,
+  Download,
   Loader2,
   Pause,
   Play,
@@ -46,6 +48,19 @@ type AnalysisState = {
   isAnalyzing: boolean;
   error?: boolean;
 };
+
+type AnalysisMode = 'interview' | 'language' | 'meeting';
+const ANALYSIS_MODES: AnalysisMode[] = ['interview', 'language', 'meeting'];
+
+function getSavedAnalysisModes(): AnalysisMode[] {
+  try {
+    const value = JSON.parse(localStorage.getItem('voxa_analysis_modes') || '[]');
+    const modes = Array.isArray(value) ? value.filter((item): item is AnalysisMode => ANALYSIS_MODES.includes(item)) : [];
+    return modes.length > 0 ? modes : ['language'];
+  } catch {
+    return ['language'];
+  }
+}
 
 function formatDuration(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -100,6 +115,10 @@ export default function HistoryView({
   const [query, setQuery] = useState('');
   const [transcriptData, setTranscriptData] = useState<TranscriptState>({ isTranscribing: false });
   const [aiData, setAiData] = useState<AnalysisState>({ isAnalyzing: false });
+  const [analysisModes, setAnalysisModes] = useState<AnalysisMode[]>(getSavedAnalysisModes);
+  const [analysisContext, setAnalysisContext] = useState('');
+  const [pdfStatus, setPdfStatus] = useState('');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<'transcript' | 'analysis'>('transcript');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -133,6 +152,7 @@ export default function HistoryView({
       setTranscriptData({ isTranscribing: false });
       setAiData({ isAnalyzing: false });
       setShowDeleteDialog(false);
+      setPdfStatus('');
 
       if (audioRef.current) {
         audioRef.current.pause();
@@ -178,7 +198,11 @@ export default function HistoryView({
         await loadRecordings();
 
         setAutoProcessStep(t('history', 'analyzingStep'));
-        const analysis = await window.recorder.analyzeWithLLM(selected.id);
+        const analysis = await window.recorder.analyzeWithLLM({
+          recordingId: selected.id,
+          modes: analysisModes,
+          outputLanguage: locale,
+        });
         setAiData({ analysis, isAnalyzing: false });
         setActiveTab('analysis');
       } catch (error: any) {
@@ -189,7 +213,7 @@ export default function HistoryView({
     }
 
     runAutoProcess();
-  }, [autoProcess, loadRecordings, selected, t]);
+  }, [analysisModes, autoProcess, loadRecordings, locale, selected, t]);
 
   const togglePlay = () => {
     if (!audioRef.current || !selected) return;
@@ -215,9 +239,41 @@ export default function HistoryView({
     setAiData({ isAnalyzing: true, status: t('history', 'analyzingStep') });
     setActiveTab('analysis');
     try {
-      setAiData({ analysis: await window.recorder.analyzeWithLLM(selected.id), isAnalyzing: false });
+      setAiData({ analysis: await window.recorder.analyzeWithLLM({
+        recordingId: selected.id,
+        modes: analysisModes,
+        outputLanguage: locale,
+        context: analysisContext,
+      }), isAnalyzing: false });
     } catch (error: any) {
       setAiData({ isAnalyzing: false, status: error?.message || t('history', 'processingFailed'), error: true });
+    }
+  };
+
+  const toggleAnalysisMode = (mode: AnalysisMode) => {
+    setAnalysisModes((current) => {
+      const next = current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode];
+      const safeNext = next.length > 0 ? next : current;
+      localStorage.setItem('voxa_analysis_modes', JSON.stringify(safeNext));
+      return safeNext;
+    });
+  };
+
+  const handleExportPdf = async () => {
+    if (!selected || !aiData.analysis) return;
+    setIsExportingPdf(true);
+    setPdfStatus('');
+    try {
+      const result = await window.recorder.exportAnalysisPdf({
+        analysis: aiData.analysis,
+        recording: selected,
+        locale,
+      });
+      setPdfStatus(result?.canceled ? '' : t('history', 'pdfSaved'));
+    } catch (error: any) {
+      setPdfStatus(error?.message || t('history', 'pdfFailed'));
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -360,12 +416,30 @@ export default function HistoryView({
               {transcriptData.markdown ? t('history', 'retranscribe') : t('history', 'transcribeAudio')}
             </button>
           ) : transcriptData.markdown ? (
-            <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={aiData.isAnalyzing} data-keyboard-primary="true">
-              {aiData.isAnalyzing ? <Loader2 className="spin" /> : <Sparkles />}
-              {aiData.analysis ? t('history', 'reAnalyze') : t('history', 'generateAiReport')}
-            </button>
+            <div className="analysis-toolbar-actions">
+              {aiData.analysis && <button type="button" className="button button-secondary" onClick={handleExportPdf} disabled={isExportingPdf}>
+                {isExportingPdf ? <Loader2 className="spin" /> : <Download />}{t('history', 'exportPdf')}
+              </button>}
+              <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={aiData.isAnalyzing} data-keyboard-primary="true">
+                {aiData.isAnalyzing ? <Loader2 className="spin" /> : <Sparkles />}
+                {aiData.analysis ? t('history', 'reAnalyze') : t('history', 'generateAiReport')}
+              </button>
+            </div>
           ) : null}
         </header>
+
+        {activeTab === 'analysis' && transcriptData.markdown && (
+          <div className="analysis-config-panel">
+            <div>
+              <span className="config-label">{t('history', 'analysisTypes')}</span>
+              <div className="analysis-mode-picker">
+                {ANALYSIS_MODES.map((mode) => <button key={mode} type="button" className={analysisModes.includes(mode) ? 'is-selected' : ''} onClick={() => toggleAnalysisMode(mode)} aria-pressed={analysisModes.includes(mode)}>{analysisModes.includes(mode) && <Check />}{t('analysisModes', mode)}</button>)}
+              </div>
+            </div>
+            <label className="analysis-context-field"><span>{t('history', 'analysisContext')}</span><input value={analysisContext} onChange={(event) => setAnalysisContext(event.target.value)} placeholder={t('history', 'analysisContextPlaceholder')} /></label>
+            {pdfStatus && <p className="analysis-export-status">{pdfStatus}</p>}
+          </div>
+        )}
 
         <div className="detail-panel">
           <AnimatePresence mode="wait" initial={false}>

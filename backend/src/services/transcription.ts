@@ -1,6 +1,6 @@
-import fs from 'fs/promises';
+import fs from "fs/promises";
 
-const DEEPGRAM_ENDPOINT = 'https://api.deepgram.com/v1/listen';
+const DEEPGRAM_ENDPOINT = "https://api.deepgram.com/v1/listen";
 
 export interface TranscriptionInput {
   apiKey: string;
@@ -22,20 +22,21 @@ export interface TranscriptionResult {
   usage: DeepgramUsage;
 }
 
-export function createDeepgramUrl(options: { maxQuality?: boolean } = {}): string {
+export function createDeepgramUrl(
+  options: { maxQuality?: boolean } = {},
+): string {
   const { maxQuality = false } = options;
   const params = new URLSearchParams({
-    model: 'nova-3',
-    diarize_model: 'latest',
-    smart_format: 'true',
-    punctuate: 'true',
-    diarize: 'true'
+    model: "nova-3",
+    diarize_model: "latest",
+    smart_format: "true",
+    punctuate: "true",
   });
 
   if (maxQuality) {
-    params.set('detect_language', 'true');
-    params.set('paragraphs', 'true');
-    params.set('utterances', 'true');
+    params.set("detect_language", "true");
+    params.set("paragraphs", "true");
+    params.set("utterances", "true");
   }
 
   return `${DEEPGRAM_ENDPOINT}?${params.toString()}`;
@@ -43,27 +44,36 @@ export function createDeepgramUrl(options: { maxQuality?: boolean } = {}): strin
 
 function formatTimestamp(seconds: number = 0): string {
   const safeSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = String(Math.floor(safeSeconds / 60)).padStart(2, '0');
-  const remainder = String(safeSeconds % 60).padStart(2, '0');
+  const minutes = String(Math.floor(safeSeconds / 60)).padStart(2, "0");
+  const remainder = String(safeSeconds % 60).padStart(2, "0");
   return `${minutes}:${remainder}`;
 }
 
-function formatSpeakerBlock(speaker: string | number | undefined, start: number, words: string[]): string {
-  return `**Speaker ${speaker ?? 'unknown'}** (${formatTimestamp(start)})\n${words.join(' ')}`;
+function formatSpeakerBlock(
+  speaker: string | number | undefined,
+  start: number,
+  words: string[],
+): string {
+  return `**Speaker ${speaker ?? "unknown"}** (${formatTimestamp(start)})\n${words.join(" ")}`;
 }
 
 export function createMarkdown(transcript: any): string {
   const utterances = transcript.results?.utterances || [];
   if (utterances.length > 0) {
-    return utterances.map((utterance: any) => {
-      const speaker = `Speaker ${utterance.speaker ?? 'unknown'}`;
-      return `**${speaker}** (${formatTimestamp(utterance.start)})\n${utterance.transcript}`;
-    }).join('\n\n');
+    return utterances
+      .map((utterance: any) => {
+        const speaker = `Speaker ${utterance.speaker ?? "unknown"}`;
+        return `**${speaker}** (${formatTimestamp(utterance.start)})\n${utterance.transcript}`;
+      })
+      .join("\n\n");
   }
 
-  const words = transcript.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+  const words =
+    transcript.results?.channels?.[0]?.alternatives?.[0]?.words || [];
   if (words.length === 0) {
-    return transcript.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+    return (
+      transcript.results?.channels?.[0]?.alternatives?.[0]?.transcript || ""
+    );
   }
 
   const blocks: string[] = [];
@@ -73,7 +83,9 @@ export function createMarkdown(transcript: any): string {
 
   for (const word of words) {
     if (word.speaker !== currentSpeaker && currentWords.length > 0) {
-      blocks.push(formatSpeakerBlock(currentSpeaker, currentStart, currentWords));
+      blocks.push(
+        formatSpeakerBlock(currentSpeaker, currentStart, currentWords),
+      );
       currentSpeaker = word.speaker;
       currentStart = word.start || 0;
       currentWords = [];
@@ -85,32 +97,38 @@ export function createMarkdown(transcript: any): string {
     blocks.push(formatSpeakerBlock(currentSpeaker, currentStart, currentWords));
   }
 
-  return blocks.join('\n\n');
+  return blocks.join("\n\n");
 }
 
-export async function transcribeWithDeepgram(input: TranscriptionInput): Promise<TranscriptionResult> {
+export async function transcribeWithDeepgram(
+  input: TranscriptionInput,
+): Promise<TranscriptionResult> {
   const { apiKey, filePath, mimeType, maxQuality = false } = input;
   if (!apiKey) {
-    throw new Error('Missing DEEPGRAM_API_KEY. Set it in your shell before running the app.');
+    throw new Error(
+      "Missing DEEPGRAM_API_KEY. Set it in your shell before running the app.",
+    );
   }
 
   let audio: Buffer;
   if (/^https:\/\//i.test(filePath)) {
     const audioResponse = await fetch(filePath);
     if (!audioResponse.ok) {
-      throw new Error(`Could not download recording from Vercel Blob (${audioResponse.status}).`);
+      throw new Error(
+        `Could not download recording from Vercel Blob (${audioResponse.status}).`,
+      );
     }
     audio = Buffer.from(await audioResponse.arrayBuffer());
   } else {
     audio = await fs.readFile(filePath);
   }
   const response = await fetch(createDeepgramUrl({ maxQuality }), {
-    method: 'POST',
+    method: "POST",
     headers: {
       Authorization: `Token ${apiKey}`,
-      'Content-Type': mimeType || 'audio/webm'
+      "Content-Type": mimeType || "audio/webm",
     },
-    body: Uint8Array.from(audio).buffer
+    body: Uint8Array.from(audio).buffer,
   });
 
   const body = await response.json().catch(() => ({}));
@@ -123,13 +141,13 @@ export async function transcribeWithDeepgram(input: TranscriptionInput): Promise
   const costUsd = (durationSeconds / 60) * 0.0043; // Deepgram Nova-3 approx cost
 
   return {
-    provider: 'deepgram',
-    quality: maxQuality ? 'max' : 'standard',
+    provider: "deepgram",
+    quality: maxQuality ? "max" : "standard",
     transcript: body,
     markdown: createMarkdown(body),
     usage: {
       durationSeconds,
-      costUsd
-    }
+      costUsd,
+    },
   };
 }

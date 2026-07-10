@@ -3,7 +3,7 @@ import { del, put } from '@vercel/blob';
 import { handleUpload, HandleUploadBody } from '@vercel/blob/client';
 import db from '../config/db';
 import { transcribeWithDeepgram } from '../services/transcription';
-import { analyzeTranscriptWithOpenRouter } from '../services/llm';
+import { analyzeTranscriptWithOpenRouter, normalizeAnalysisModes } from '../services/llm';
 
 async function ensureUser(userId: string): Promise<void> {
   await db.query(`
@@ -134,7 +134,14 @@ export const uploadRecording = async (req: Request, res: Response): Promise<void
 export const listRecordings = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id || 'local-user';
-    const { rows } = await db.query('SELECT * FROM recordings WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+    const { rows } = await db.query(`
+      SELECT r.*,
+        EXISTS (SELECT 1 FROM transcripts t WHERE t.recording_id = r.id) AS has_transcript,
+        EXISTS (SELECT 1 FROM analyses a WHERE a.recording_id = r.id) AS has_analysis
+      FROM recordings r
+      WHERE r.user_id = $1
+      ORDER BY r.created_at DESC
+    `, [userId]);
     
     const recordings = rows.map((r: any) => ({
       id: r.id,
@@ -144,13 +151,79 @@ export const listRecordings = async (req: Request, res: Response): Promise<void>
       mode: r.mode,
       file: r.local_file_path,
       playbackUrl: r.local_file_path,
-      sizeBytes: r.size_bytes
+      sizeBytes: r.size_bytes,
+      transcript: r.has_transcript ? { ready: true } : null,
+      hasAnalysis: r.has_analysis
     }));
     
     res.json(recordings);
   } catch (error: any) {
     console.error('Error listing recordings:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getTranscript = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id || 'local-user';
+    const { rows } = await db.query(`
+      SELECT t.provider, t.markdown, t.created_at
+      FROM transcripts t
+      JOIN recordings r ON r.id = t.recording_id
+      WHERE t.recording_id = $1 AND r.user_id = $2
+      ORDER BY t.created_at DESC
+      LIMIT 1
+    `, [req.params.id, userId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Transcript not found' });
+      return;
+    }
+    res.json({ provider: rows[0].provider, markdown: rows[0].markdown, createdAt: rows[0].created_at });
+  } catch (error: any) {
+    console.error('Error loading transcript:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+export const getAnalysis = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id || 'local-user';
+    const { rows } = await db.query(`
+      SELECT a.json_data, a.created_at
+      FROM analyses a
+      JOIN recordings r ON r.id = a.recording_id
+      WHERE a.recording_id = $1 AND r.user_id = $2
+      ORDER BY a.created_at DESC
+      LIMIT 1
+    `, [req.params.id, userId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Analysis not found' });
+      return;
+    }
+    res.json(rows[0].json_data);
+  } catch (error: any) {
+    console.error('Error loading analysis:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+export const deleteRecording = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id || 'local-user';
+    const { rows } = await db.query(
+      'DELETE FROM recordings WHERE id = $1 AND user_id = $2 RETURNING local_file_path',
+      [req.params.id, userId]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Recording not found' });
+      return;
+    }
+    const file = rows[0].local_file_path;
+    if (isRecordingBlobUrl(file)) await del(file).catch((error) => console.error('Could not delete recording blob:', error));
+    res.status(204).send();
+  } catch (error: any) {
+    console.error('Error deleting recording:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 };
 
@@ -199,7 +272,14 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
     const userId = req.user?.id || 'local-user';
     const { id } = req.params;
 
-    const { rows: tRows } = await db.query('SELECT markdown FROM transcripts WHERE recording_id = $1 ORDER BY created_at DESC LIMIT 1', [id]);
+    const { rows: tRows } = await db.query(`
+      SELECT t.markdown
+      FROM transcripts t
+      JOIN recordings r ON r.id = t.recording_id
+      WHERE t.recording_id = $1 AND r.user_id = $2
+      ORDER BY t.created_at DESC
+      LIMIT 1
+    `, [id, userId]);
     if (tRows.length === 0) {
       res.status(404).json({ error: 'Transcript not found for this recording' });
       return;
@@ -209,7 +289,14 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
     const apiKey = process.env.OPENROUTER_API_KEY || '';
     const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite-preview-07-24';
 
-    const analysisResult = await analyzeTranscriptWithOpenRouter(apiKey, transcript.markdown, model);
+    const modes = normalizeAnalysisModes(req.body?.modes);
+    const outputLanguage = typeof req.body?.outputLanguage === 'string' ? req.body.outputLanguage : 'pt-BR';
+    const context = typeof req.body?.context === 'string' ? req.body.context : '';
+    const analysisResult = await analyzeTranscriptWithOpenRouter(apiKey, transcript.markdown, model, {
+      modes,
+      outputLanguage,
+      context
+    });
     
     await db.query(`
       INSERT INTO analyses (recording_id, json_data)

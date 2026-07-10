@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AudioLines,
+  BriefcaseBusiness,
   Check,
   ChevronDown,
   Clock3,
   FileAudio,
   FileText,
   Keyboard,
+  Languages,
   Mic,
   Pause,
   Play,
@@ -15,6 +17,7 @@ import {
   RefreshCw,
   Settings2,
   Square,
+  Users,
 } from 'lucide-react';
 import type { LibraryStatus, Recording } from '../App';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -30,6 +33,19 @@ interface DashboardProps {
 }
 
 type ShortcutSettings = { record: string; options: string[] };
+type AnalysisMode = 'interview' | 'language' | 'meeting';
+
+const analysisModeIcons = { interview: BriefcaseBusiness, language: Languages, meeting: Users };
+
+function getSavedAnalysisModes(): AnalysisMode[] {
+  try {
+    const value = JSON.parse(localStorage.getItem('voxa_analysis_modes') || '[]');
+    const modes = Array.isArray(value) ? value.filter((item): item is AnalysisMode => ['interview', 'language', 'meeting'].includes(item)) : [];
+    return modes.length > 0 ? modes : ['language'];
+  } catch {
+    return ['language'];
+  }
+}
 
 const shortcutLabels: Record<string, string> = {
   'Option+Space': 'Option + Space',
@@ -73,6 +89,7 @@ export default function Dashboard({
   const [isShortcutPanelOpen, setIsShortcutPanelOpen] = useState(false);
   const [shortcutStatus, setShortcutStatus] = useState('');
   const [micStatus, setMicStatus] = useState('');
+  const [analysisModes, setAnalysisModes] = useState<AnalysisMode[]>(getSavedAnalysisModes);
 
   const currentShortcut = shortcutLabels[shortcutSettings.record] || shortcutSettings.record;
   const recentRecordings = useMemo(
@@ -155,6 +172,15 @@ export default function Dashboard({
     }
   };
 
+  const toggleAnalysisMode = (mode: AnalysisMode) => {
+    setAnalysisModes((current) => {
+      const next = current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode];
+      const safeNext = next.length > 0 ? next : current;
+      localStorage.setItem('voxa_analysis_modes', JSON.stringify(safeNext));
+      return safeNext;
+    });
+  };
+
   return (
     <main className="workspace-view">
       <section className="workspace-intro">
@@ -229,6 +255,18 @@ export default function Dashboard({
           <p className="recorder-description">
             {phase === 'error' ? status : isRecording ? t('recorder', 'recordingDescription') : t('recorder', 'idleDescription')}
           </p>
+          {!isRecording && (
+            <div className="recorder-analysis-modes">
+              <span>{t('recorder', 'analyzeAs')}</span>
+              <div>
+                {(Object.keys(analysisModeIcons) as AnalysisMode[]).map((mode) => {
+                  const Icon = analysisModeIcons[mode];
+                  const selectedMode = analysisModes.includes(mode);
+                  return <button key={mode} type="button" className={selectedMode ? 'is-selected' : ''} aria-pressed={selectedMode} onClick={() => toggleAnalysisMode(mode)}><Icon />{t('analysisModes', mode)}{selectedMode && <Check />}</button>;
+                })}
+              </div>
+            </div>
+          )}
           {micStatus && <p className="inline-notice">{micStatus}</p>}
 
           <div className="recorder-actions">
