@@ -2,6 +2,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { loadEnvFile } = require('./env-loader');
 const { resolveApiUrl } = require('./release-config');
+const { startRendererServer } = require('./renderer-server');
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
@@ -14,6 +15,8 @@ let tray = null;
 let isQuitting = false;
 let mainWindow = null;
 let widgetWindow = null;
+let rendererServer = null;
+let rendererOrigin = null;
 const DEFAULT_RECORD_SHORTCUT = process.platform === 'darwin'
   ? 'Option+Space'
   : 'CommandOrControl+Shift+Space';
@@ -30,6 +33,15 @@ const requestedWindowWidth = Number.parseInt(process.env.VOXA_WINDOW_WIDTH || ''
 const requestedWindowHeight = Number.parseInt(process.env.VOXA_WINDOW_HEIGHT || '', 10);
 const MAIN_WINDOW_WIDTH = Number.isFinite(requestedWindowWidth) ? Math.max(800, requestedWindowWidth) : 1024;
 const MAIN_WINDOW_HEIGHT = Number.isFinite(requestedWindowHeight) ? Math.max(600, requestedWindowHeight) : 768;
+
+function rendererUrl(hash = '') {
+  const origin = process.env.NODE_ENV === 'development'
+    ? 'http://localhost:5173'
+    : rendererOrigin;
+
+  if (!origin) throw new Error('Renderer server is not ready.');
+  return `${origin}${hash ? `/#/${hash}` : ''}`;
+}
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-media', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
@@ -127,11 +139,7 @@ const createWidgetWindow = () => {
 
   widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  if (process.env.NODE_ENV === 'development') {
-    widgetWindow.loadURL('http://localhost:5173/#/widget');
-  } else {
-    widgetWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'widget' });
-  }
+  widgetWindow.loadURL(rendererUrl('widget'));
 
   widgetWindow.on('close', (event) => {
     if (!isQuitting) {
@@ -174,11 +182,7 @@ function createWindow() {
     if (mainWindow) mainWindow.show();
   });
 
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
-  }
+  mainWindow.loadURL(rendererUrl());
 }
 
 ipcMain.handle('recorder:probe', async () => {
@@ -384,6 +388,11 @@ ipcMain.on('app:show-dashboard', () => {
 });
 
 app.whenReady().then(async () => {
+  if (process.env.NODE_ENV !== 'development') {
+    rendererServer = await startRendererServer(path.join(__dirname, '../dist'));
+    rendererOrigin = rendererServer.origin;
+  }
+
   protocol.handle('local-media', (request) => {
     return net.fetch('file://' + request.url.replace('local-media://', ''));
   });
@@ -455,6 +464,10 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (rendererServer) {
+    rendererServer.close().catch(() => {});
+    rendererServer = null;
+  }
 });
 
 app.on('window-all-closed', () => {

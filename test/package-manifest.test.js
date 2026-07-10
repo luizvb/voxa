@@ -40,6 +40,18 @@ test('packaged app defaults to the stable production Vercel API', () => {
   assert.equal(releaseConfig.resolveApiUrl({ VOXA_API_URL: 'https://api.example.com/' }), 'https://api.example.com');
 });
 
+test('packaged renderer uses an HTTP origin compatible with Better Auth', () => {
+  const main = fs.readFileSync(path.join(root, 'app', 'main.js'), 'utf8');
+  const rendererServer = fs.readFileSync(path.join(root, 'app', 'renderer-server.js'), 'utf8');
+
+  assert.match(main, /startRendererServer/);
+  assert.match(main, /mainWindow\.loadURL\(rendererUrl\(\)\)/);
+  assert.match(main, /widgetWindow\.loadURL\(rendererUrl\('widget'\)\)/);
+  assert.doesNotMatch(main, /\.loadFile\(/);
+  assert.match(rendererServer, /server\.listen\(0, '127\.0\.0\.1'/);
+  assert.match(rendererServer, /origin: `http:\/\/127\.0\.0\.1:/);
+});
+
 test('recordings use direct Vercel Blob upload and remote playback URLs', () => {
   const main = fs.readFileSync(path.join(root, 'app', 'main.js'), 'utf8');
   const routes = fs.readFileSync(path.join(root, 'backend', 'src', 'routes', 'recordings.ts'), 'utf8');
