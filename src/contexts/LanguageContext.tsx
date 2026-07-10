@@ -16,7 +16,12 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('voxa_language');
-    return (saved as Language) || 'pt';
+    if (saved) return saved as Language;
+
+    const browserLang = navigator.language.toLowerCase();
+    if (browserLang.startsWith('pt')) return 'pt';
+    if (browserLang.startsWith('es')) return 'es';
+    return 'en';
   });
 
   const setLanguage = (lang: Language) => {

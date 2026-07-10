@@ -1,420 +1,423 @@
-import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, FileText, Loader2, HardDrive, Clock, Trash2, BrainCircuit } from 'lucide-react';
-import AIAnalysis from './AIAnalysis';
-import clsx from 'clsx';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  ArrowLeft,
+  BrainCircuit,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  FileAudio,
+  FileText,
+  Loader2,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
+import type { LibraryStatus, Recording } from '../App';
 import { useLanguage } from '../contexts/LanguageContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import AIAnalysis from './AIAnalysis';
 
 interface HistoryViewProps {
-  recordings: any[];
+  recordings: Recording[];
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  onSelect: (id: string | null, autoProcess?: boolean) => void;
   loadRecordings: () => Promise<void>;
+  libraryStatus: LibraryStatus;
+  libraryError: string;
+  onRetry: () => void;
+  onStartRecording: () => void;
   autoProcess?: boolean;
 }
 
-export default function HistoryView({ recordings, selectedId, onSelect, loadRecordings, autoProcess }: HistoryViewProps) {
-  const { t } = useLanguage();
+type TranscriptState = {
+  markdown?: string;
+  status?: string;
+  isTranscribing: boolean;
+  error?: boolean;
+};
 
-  // Transcript state
-  const [transcriptData, setTranscriptData] = useState<{markdown?: string, status?: string, isTranscribing: boolean}>({ isTranscribing: false });
+type AnalysisState = {
+  analysis?: any;
+  status?: string;
+  isAnalyzing: boolean;
+  error?: boolean;
+};
 
-  // AI Analysis state
-  const [aiData, setAiData] = useState<{analysis?: any, status?: string, isAnalyzing: boolean}>({ isAnalyzing: false });
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+function TranscriptDocument({ markdown, youLabel }: { markdown: string; youLabel: string }) {
+  const blocks = markdown.split(/(?:\r?\n){2,}/).filter((block) => block.trim());
+
+  return (
+    <article className="transcript-document">
+      {blocks.map((block, index) => {
+        const lines = block.split(/\r?\n/).filter((line) => line.trim());
+        if (lines.length === 1) {
+          return <div className="transcript-divider" key={`${lines[0]}-${index}`}>{lines[0]}</div>;
+        }
+
+        const [heading, ...body] = lines;
+        const rawHeading = heading.replace(/\*\*/g, '').trim();
+        const isSelf = rawHeading.includes('Speaker 0');
+        const timestamp = rawHeading.match(/\((.*?)\)/)?.[1];
+        const speaker = isSelf ? youLabel : rawHeading.split('(')[0].trim();
+
+        return (
+          <section className="transcript-block" key={`${rawHeading}-${index}`}>
+            <header>
+              <strong>{speaker}</strong>
+              {timestamp && <time>{timestamp}</time>}
+            </header>
+            <p>{body.join(' ').trim()}</p>
+          </section>
+        );
+      })}
+    </article>
+  );
+}
+
+export default function HistoryView({
+  recordings,
+  selectedId,
+  onSelect,
+  loadRecordings,
+  libraryStatus,
+  libraryError,
+  onRetry,
+  onStartRecording,
+  autoProcess,
+}: HistoryViewProps) {
+  const { t, language } = useLanguage();
+  const [query, setQuery] = useState('');
+  const [transcriptData, setTranscriptData] = useState<TranscriptState>({ isTranscribing: false });
+  const [aiData, setAiData] = useState<AnalysisState>({ isAnalyzing: false });
   const [activeTab, setActiveTab] = useState<'transcript' | 'analysis'>('transcript');
-
-  // Player state
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const selected = recordings.find(r => r.id === selectedId);
-
-  const formatDuration = (ms: number) => {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-    const seconds = String(totalSeconds % 60).padStart(2, '0');
-    return `${minutes}:${seconds}`;
-  };
-
   const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [autoProcessStep, setAutoProcessStep] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const autoProcessAttemptedRef = useRef<string | null>(null);
+
+  const selected = recordings.find((recording) => recording.id === selectedId);
+  const sortedRecordings = useMemo(
+    () => [...recordings].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()),
+    [recordings],
+  );
+  const filteredRecordings = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return sortedRecordings;
+    return sortedRecordings.filter((recording) => recording.name.toLocaleLowerCase().includes(normalized));
+  }, [query, sortedRecordings]);
+
+  const locale = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US';
 
   useEffect(() => {
-    const runAutoProcess = async () => {
-      if (autoProcess && selected && !selected.transcript && !transcriptData.isTranscribing && !isAutoProcessing) {
-        setIsAutoProcessing(true);
-        setAutoProcessStep('Transcribing your audio...');
-        try {
-          const result = await window.recorder.transcribeWithDeepgram({
-            recordingId: selected.id,
-            maxQuality: false
-          });
-          setTranscriptData({
-            markdown: result.markdown,
-            isTranscribing: false,
-            status: `Transcript saved`
-          });
-          await loadRecordings();
-          
-          setAutoProcessStep('Generating AI insights...');
-          const aiResult = await window.recorder.analyzeWithLLM(selected.id);
-          setAiData({ analysis: aiResult, isAnalyzing: false });
-          setActiveTab('analysis');
-        } catch (e: any) {
-          console.error('Auto process failed:', e);
-        } finally {
-          setIsAutoProcessing(false);
-        }
-      }
-    };
-    runAutoProcess();
-  }, [autoProcess, selected]);
-
-  useEffect(() => {
-    const handleSelect = async () => {
+    async function loadSelectedRecording() {
       if (!selected) return;
 
       setIsPlaying(false);
       setCurrentTime(0);
+      setActiveTab('transcript');
       setTranscriptData({ isTranscribing: false });
+      setAiData({ isAnalyzing: false });
+      setShowDeleteDialog(false);
 
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = selected.playbackUrl;
+        audioRef.current.src = selected.playbackUrl || '';
       }
 
-      if (selected.transcript) {
-        try {
-          const result = await window.recorder.getTranscript(selected.id);
-          setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: `Saved (${selected.transcript.quality})` });
-
-          const analysis = await window.recorder.getAnalysis(selected.id);
-          if (analysis) {
-            setAiData({ analysis, isAnalyzing: false });
-          } else {
-            setAiData({ isAnalyzing: false, status: 'No AI analysis yet' });
-          }
-        } catch (e: any) {
-          setTranscriptData({ status: 'Error loading transcript: ' + e.message, isTranscribing: false });
-        }
-      } else {
-        setTranscriptData({ status: 'No transcript yet', isTranscribing: false });
-        setAiData({ isAnalyzing: false, status: 'Transcript required for analysis' });
+      if (!selected.transcript) {
+        setTranscriptData({ isTranscribing: false, status: t('history', 'noTranscript') });
+        setAiData({ isAnalyzing: false, status: t('history', 'transcriptRequired') });
+        return;
       }
-    };
 
-    handleSelect();
-  }, [selectedId, selected]);
+      try {
+        const result = await window.recorder.getTranscript(selected.id);
+        setTranscriptData({
+          markdown: result?.markdown || '',
+          isTranscribing: false,
+          status: t('history', 'transcriptSaved'),
+        });
+
+        const analysis = await window.recorder.getAnalysis(selected.id);
+        setAiData(analysis
+          ? { analysis, isAnalyzing: false }
+          : { isAnalyzing: false, status: t('history', 'noAnalysis') });
+      } catch (error: any) {
+        setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'loadFailed'), error: true });
+      }
+    }
+
+    loadSelectedRecording();
+  }, [selectedId, selected?.transcript, selected?.playbackUrl, t]);
+
+  useEffect(() => {
+    async function runAutoProcess() {
+      if (!autoProcess || !selected || selected.transcript || autoProcessAttemptedRef.current === selected.id) return;
+      autoProcessAttemptedRef.current = selected.id;
+      setIsAutoProcessing(true);
+      setAutoProcessStep(t('history', 'transcribingStep'));
+
+      try {
+        const result = await window.recorder.transcribeWithDeepgram({ recordingId: selected.id, maxQuality: false });
+        setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
+        await loadRecordings();
+
+        setAutoProcessStep(t('history', 'analyzingStep'));
+        const analysis = await window.recorder.analyzeWithLLM(selected.id);
+        setAiData({ analysis, isAnalyzing: false });
+        setActiveTab('analysis');
+      } catch (error: any) {
+        setTranscriptData((current) => ({ ...current, isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true }));
+      } finally {
+        setIsAutoProcessing(false);
+      }
+    }
+
+    runAutoProcess();
+  }, [autoProcess, loadRecordings, selected, t]);
 
   const togglePlay = () => {
     if (!audioRef.current || !selected) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => {});
-    }
-    setIsPlaying(!isPlaying);
+    if (isPlaying) audioRef.current.pause();
+    else audioRef.current.play().catch(() => undefined);
+    setIsPlaying((value) => !value);
   };
 
   const handleTranscribe = async () => {
     if (!selected) return;
-    setTranscriptData({ isTranscribing: true, status: 'Transcribing via Deepgram...' });
-
+    setTranscriptData({ isTranscribing: true, status: t('history', 'transcribingStep') });
     try {
-      const result = await window.recorder.transcribeWithDeepgram({
-        recordingId: selected.id,
-        maxQuality: false
-      });
-      setTranscriptData({
-        markdown: result.markdown,
-        isTranscribing: false,
-        status: `Transcript saved`
-      });
-      loadRecordings();
-    } catch (e: any) {
-      setTranscriptData({ isTranscribing: false, status: `Failed: ${e.message}` });
+      const result = await window.recorder.transcribeWithDeepgram({ recordingId: selected.id, maxQuality: false });
+      setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
+      await loadRecordings();
+    } catch (error: any) {
+      setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true });
     }
   };
 
   const handleAnalyze = async () => {
     if (!selected) return;
-    setAiData({ isAnalyzing: true, status: 'Analyzing with OpenRouter...' });
+    setAiData({ isAnalyzing: true, status: t('history', 'analyzingStep') });
     setActiveTab('analysis');
-
     try {
-      const result = await window.recorder.analyzeWithLLM(selected.id);
-      setAiData({ analysis: result, isAnalyzing: false });
-    } catch (e: any) {
-      setAiData({ isAnalyzing: false, status: `Failed: ${e.message}` });
+      setAiData({ analysis: await window.recorder.analyzeWithLLM(selected.id), isAnalyzing: false });
+    } catch (error: any) {
+      setAiData({ isAnalyzing: false, status: error?.message || t('history', 'processingFailed'), error: true });
     }
   };
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (confirm(t('history', 'deleteConfirm') || 'Are you sure you want to delete this recording?')) {
-      try {
-        await window.recorder.deleteRecording(selected.id);
-        onSelect(null);
-        loadRecordings();
-      } catch (e) {
-        console.error('Failed to delete recording', e);
-        alert(t('history', 'deleteFailed') || 'Failed to delete recording');
-      }
+    setIsDeleting(true);
+    try {
+      await window.recorder.deleteRecording(selected.id);
+      setShowDeleteDialog(false);
+      onSelect(null);
+      await loadRecordings();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
   if (!selected) {
     return (
-      <div className="h-full flex items-center justify-center text-white/30">
-        {t('history', 'selectRecording') || 'Select a recording from the sidebar to view details.'}
-      </div>
+      <main className="library-view">
+        <section className="library-intro">
+          <div>
+            <h2>{t('library', 'title')}</h2>
+            <p>{t('library', 'subtitle')}</p>
+          </div>
+          <label className="search-field">
+            <Search />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('history', 'search')} />
+          </label>
+        </section>
+
+        {libraryStatus === 'loading' && recordings.length === 0 ? (
+          <div className="library-list">
+            {[0, 1, 2, 3].map((item) => <div className="library-row skeleton-row" key={item} />)}
+          </div>
+        ) : libraryStatus === 'error' ? (
+          <div className="empty-state library-empty">
+            <span className="empty-icon"><RefreshCw /></span>
+            <strong>{t('library', 'offlineTitle')}</strong>
+            <p>{libraryError || t('library', 'offlineDescription')}</p>
+            <button type="button" className="button button-secondary" onClick={onRetry}>{t('common', 'retry')}</button>
+          </div>
+        ) : recordings.length === 0 ? (
+          <div className="empty-state library-empty">
+            <span className="empty-icon"><FileAudio /></span>
+            <strong>{t('library', 'emptyTitle')}</strong>
+            <p>{t('library', 'emptyDescription')}</p>
+            <button type="button" className="button button-primary" onClick={onStartRecording}>{t('navigation', 'newRecording')}</button>
+          </div>
+        ) : filteredRecordings.length === 0 ? (
+          <div className="empty-state library-empty">
+            <span className="empty-icon"><Search /></span>
+            <strong>{t('library', 'noResults')}</strong>
+            <p>{t('library', 'noResultsDescription')}</p>
+          </div>
+        ) : (
+          <div className="library-list">
+            <div className="library-list-header">
+              <span>{t('library', 'conversation')}</span>
+              <span>{t('library', 'date')}</span>
+              <span>{t('library', 'duration')}</span>
+              <span>{t('library', 'status')}</span>
+            </div>
+            {filteredRecordings.map((recording) => (
+              <button key={recording.id} type="button" className="library-row" onClick={() => onSelect(recording.id)}>
+                <span className="library-name">
+                  <span className="recording-file-icon">{recording.transcript ? <FileText /> : <FileAudio />}</span>
+                  <span><strong>{recording.name}</strong><small>{recording.transcript ? t('library', 'transcriptReady') : t('library', 'audioSaved')}</small></span>
+                </span>
+                <time>{recording.createdAt ? new Date(recording.createdAt).toLocaleDateString(locale) : '—'}</time>
+                <span>{formatDuration(recording.durationMs)}</span>
+                <span className={recording.transcript ? 'recording-state is-ready' : 'recording-state'}>{recording.transcript ? t('library', 'ready') : t('library', 'audio')}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </main>
     );
   }
 
+  const durationSeconds = Math.max(0, selected.durationMs / 1000);
+  const progress = durationSeconds ? Math.min(100, (currentTime / durationSeconds) * 100) : 0;
+
   return (
-    <motion.div
-      key={selected.id}
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col h-full gap-6 max-w-5xl mx-auto w-full relative"
-    >
-      <AnimatePresence>
-        {isAutoProcessing && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-[#121212]/80 backdrop-blur-md flex flex-col items-center justify-center rounded-3xl border border-white/5 shadow-2xl"
-          >
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
-              <Loader2 className="w-16 h-16 text-primary animate-spin mb-6 relative z-10" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-2">{autoProcessStep}</h3>
-            <p className="text-sm text-white/50 max-w-sm text-center">
-              Please wait while our AI processes your conversation to extract valuable insights.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <main className="detail-view">
       <audio
         ref={audioRef}
+        src={selected.playbackUrl}
         onEnded={() => setIsPlaying(false)}
         onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
-        className="hidden"
       />
 
-      {/* Header */}
-      <div className="mb-2 flex flex-wrap gap-3 items-start">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white/90 break-anywhere">{selected.name}</h2>
-          <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-white/50">
-            <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {new Date(selected.createdAt).toLocaleString()}</span>
-            <span className="flex items-center gap-1.5"><HardDrive className="w-4 h-4" /> {t('history', 'localStorage') || 'Local Storage'}</span>
+      <header className="detail-header">
+        <button type="button" className="back-button" onClick={() => onSelect(null)}><ArrowLeft /> {t('library', 'back')}</button>
+        <div className="detail-title-row">
+          <div>
+            <h2>{selected.name}</h2>
+            <div className="detail-meta">
+              <span><CalendarDays /> {selected.createdAt ? new Date(selected.createdAt).toLocaleString(locale) : t('library', 'unknownDate')}</span>
+              <span><Clock3 /> {formatDuration(selected.durationMs)}</span>
+              <span><CheckCircle2 /> {selected.transcript ? t('library', 'transcriptReady') : t('library', 'audioSaved')}</span>
+            </div>
           </div>
+          <button type="button" className="icon-button danger-icon" onClick={() => setShowDeleteDialog(true)} aria-label={t('history', 'deleteRecording')}><Trash2 /></button>
         </div>
-        <button
-          onClick={handleDelete}
-          className="p-2.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-xl transition-colors"
-          title="Delete recording"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
-      </div>
+      </header>
 
-      {/* Audio Player Card */}
-      <div className="bg-[#1A1A1A] border border-white/10 rounded-2xl p-4 sm:p-5 flex items-center gap-3 sm:gap-5">
-        <button
-          onClick={togglePlay}
-          className="w-14 h-14 shrink-0 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        >
-          {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
+      <section className="audio-player">
+        <button type="button" className="player-button" onClick={togglePlay} aria-label={isPlaying ? t('history', 'pauseAudio') : t('history', 'playAudio')}>
+          {isPlaying ? <Pause /> : <Play />}
         </button>
-
-        <div className="flex-1">
-          <div className="flex justify-between text-xs font-mono text-white/50 mb-3">
-            <span>{formatDuration(currentTime * 1000)}</span>
-            <span>{formatDuration(selected.durationMs)}</span>
-          </div>
-          <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-blue-500 rounded-full"
-              style={{ width: `${(currentTime / (selected.durationMs / 1000)) * 100}%` }}
-              layout
-            />
-          </div>
+        <div className="player-track">
+          <div className="player-times"><time>{formatDuration(currentTime * 1000)}</time><time>{formatDuration(selected.durationMs)}</time></div>
+          <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
         </div>
-      </div>
+      </section>
 
-      {/* Transcript / AI Analysis Card */}
-      <div className="flex-1 bg-[#1A1A1A] border border-white/10 rounded-3xl flex flex-col overflow-hidden shadow-2xl">
-        <div className="p-3 sm:p-4 border-b border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between bg-[#202020]">
+      {isAutoProcessing && (
+        <div className="processing-banner" role="status">
+          <Loader2 className="spin" />
+          <div><strong>{autoProcessStep}</strong><p>{t('history', 'processingDescription')}</p></div>
+        </div>
+      )}
 
-          <div className="shrink-0 flex gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5">
-            <button
-              onClick={() => setActiveTab('transcript')}
-              className={clsx(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors relative",
-                activeTab === 'transcript' ? "text-white" : "text-white/40 hover:text-white/70"
-              )}
-            >
-              {activeTab === 'transcript' && (
-                <motion.div layoutId="activeTabIndicator" className="absolute inset-0 bg-white/10 rounded-lg" />
-              )}
-              <FileText className="w-4 h-4 relative z-10" /> <span className="relative z-10">{t('history', 'transcript') || 'Transcript'}</span>
+      <section className="detail-content">
+        <header className="detail-tabs-row">
+          <div className="detail-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={activeTab === 'transcript'} className={activeTab === 'transcript' ? 'is-active' : ''} onClick={() => setActiveTab('transcript')}>
+              <FileText /> {t('history', 'transcript')}
             </button>
-            <button
-              onClick={() => setActiveTab('analysis')}
-              className={clsx(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors relative",
-                activeTab === 'analysis' ? "text-white" : "text-white/40 hover:text-white/70"
-              )}
-            >
-              {activeTab === 'analysis' && (
-                <motion.div layoutId="activeTabIndicator" className="absolute inset-0 bg-white/10 rounded-lg" />
-              )}
-              <BrainCircuit className="w-4 h-4 relative z-10" /> <span className="relative z-10">{t('history', 'aiAnalysis') || 'AI Analysis'}</span>
+            <button type="button" role="tab" aria-selected={activeTab === 'analysis'} className={activeTab === 'analysis' ? 'is-active' : ''} onClick={() => setActiveTab('analysis')}>
+              <BrainCircuit /> {t('history', 'aiAnalysis')}
             </button>
           </div>
 
-          <div className="shrink-0 flex items-center gap-3">
+          {activeTab === 'transcript' ? (
+            <button type="button" className="button button-secondary" onClick={handleTranscribe} disabled={transcriptData.isTranscribing} data-keyboard-primary="true">
+              {transcriptData.isTranscribing ? <Loader2 className="spin" /> : <FileText />}
+              {transcriptData.markdown ? t('history', 'retranscribe') : t('history', 'transcribeAudio')}
+            </button>
+          ) : transcriptData.markdown ? (
+            <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={aiData.isAnalyzing} data-keyboard-primary="true">
+              {aiData.isAnalyzing ? <Loader2 className="spin" /> : <Sparkles />}
+              {aiData.analysis ? t('history', 'reAnalyze') : t('history', 'generateAiReport')}
+            </button>
+          ) : null}
+        </header>
+
+        <div className="detail-panel">
+          <AnimatePresence mode="wait" initial={false}>
             {activeTab === 'transcript' ? (
-              <>
-                {!transcriptData.isTranscribing && (
-                  <button
-                    onClick={handleTranscribe}
-                    data-keyboard-primary="true"
-                    className={clsx(
-                      "px-5 py-2 text-xs font-semibold rounded-xl transition-all hover:scale-105 active:scale-95",
-                      transcriptData.markdown
-                        ? "bg-white/10 text-white hover:bg-white/20"
-                        : "bg-white text-black hover:bg-white/90 shadow-lg"
-                    )}
-                  >
-                    {transcriptData.markdown ? (t('history', 'retranscribe') || 'Retranscribe') : (t('history', 'transcribeAudio') || 'Transcribe Audio')}
-                  </button>
-                )}
-                {transcriptData.isTranscribing && (
-                  <div className="text-xs text-blue-400 flex items-center gap-2 font-medium">
-                    <Loader2 className="w-4 h-4 animate-spin" /> {t('history', 'processing') || 'Processing...'}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {!aiData.isAnalyzing && transcriptData.markdown && (
-                  <button
-                    onClick={handleAnalyze}
-                    data-keyboard-primary="true"
-                    className={clsx(
-                      "px-5 py-2 text-xs font-semibold rounded-xl transition-all hover:scale-105 active:scale-95 flex items-center gap-2",
-                      aiData.analysis
-                        ? "bg-white/10 text-white hover:bg-white/20"
-                        : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:opacity-90 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
-                    )}
-                  >
-                    {aiData.analysis ? (t('history', 'reAnalyze') || 'Re-analyze') : (t('history', 'generateAiReport') || 'Generate AI Report')}
-                  </button>
-                )}
-                {aiData.isAnalyzing && (
-                  <div className="text-xs text-purple-400 flex items-center gap-2 font-medium">
-                    <Loader2 className="w-4 h-4 animate-spin" /> {t('history', 'thinking') || 'Thinking...'}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 relative bg-gradient-to-b from-[#1A1A1A] to-[#121212]">
-          <AnimatePresence mode="wait">
-            {activeTab === 'transcript' ? (
-              <motion.div
-                key="transcript-view"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
-              >
-                {transcriptData.markdown ? (
-                  <div className="text-white/80 text-[15px] leading-relaxed max-w-4xl mx-auto w-full flex flex-col space-y-8">
-                    {transcriptData.markdown.split(/(?:\r?\n){2,}/).map((block, i) => {
-                      const parts = block.split(/\r?\n/).filter(line => line.trim().length > 0);
-                      if (parts.length === 0) return null;
-
-                      if (parts.length === 1) {
-                        return (
-                          <div key={i} className="flex w-full justify-center my-6">
-                            <div className="bg-white/5 text-white/40 text-xs px-4 py-2 rounded-full border border-white/10 shadow-sm font-medium tracking-wide">
-                              {parts[0]}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const [heading, ...body] = parts;
-                      const rawHeading = heading.replace(/\*\*/g, '').trim();
-                      const isSelf = rawHeading.includes('Speaker 0');
-
-                      return (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: Math.min(i * 0.05, 0.5) }}
-                          key={i}
-                          className={clsx("flex w-full", isSelf ? "justify-end" : "justify-start")}
-                        >
-                          <div className={clsx(
-                            "max-w-[85%] md:max-w-[75%] rounded-3xl p-5 shadow-md",
-                            isSelf
-                              ? "bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20 text-orange-50 rounded-tr-sm"
-                              : "bg-gradient-to-br from-[#262626] to-[#1E1E1E] border border-white/5 text-white/90 rounded-tl-sm"
-                          )}>
-                            <div className={clsx(
-                              "text-[10px] font-bold uppercase tracking-widest mb-2 flex items-center justify-between gap-2 flex-wrap",
-                              isSelf ? "text-orange-400/80" : "text-white/40"
-                            )}>
-                              <span>{isSelf ? (t('history', 'you') || 'You') : rawHeading.split('(')[0].trim()}</span>
-                              <span className="opacity-50 font-mono tracking-normal">{rawHeading.match(/\((.*?)\)/)?.[1]}</span>
-                            </div>
-                            <div className="text-[15px] leading-relaxed break-anywhere">
-                              {body.join(' ').trim()}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
+              <motion.div key="transcript" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                {transcriptData.isTranscribing ? (
+                  <div className="content-status"><Loader2 className="spin" /><strong>{t('history', 'transcribingStep')}</strong></div>
+                ) : transcriptData.markdown ? (
+                  <TranscriptDocument markdown={transcriptData.markdown} youLabel={t('history', 'you')} />
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-white/30 text-sm">
-                    {transcriptData.status || (t('history', 'noTranscript') || 'No transcript yet.')}
+                  <div className={transcriptData.error ? 'content-status is-error' : 'content-status'}>
+                    <FileText /><strong>{transcriptData.status || t('history', 'noTranscript')}</strong>
+                    <p>{t('history', 'transcriptEmptyDescription')}</p>
+                    <button type="button" className="button button-secondary" onClick={handleTranscribe}>{t('history', 'transcribeAudio')}</button>
                   </div>
                 )}
               </motion.div>
             ) : (
-              <motion.div
-                key="analysis-view"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
-              >
-                {aiData.analysis ? (
+              <motion.div key="analysis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                {aiData.isAnalyzing ? (
+                  <div className="content-status"><Loader2 className="spin" /><strong>{t('history', 'analyzingStep')}</strong></div>
+                ) : aiData.analysis ? (
                   <AIAnalysis analysis={aiData.analysis} />
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-white/30 text-sm">
-                    {aiData.status || (transcriptData.markdown ? "Ready to generate AI report." : "Transcript required before analysis.")}
+                  <div className={aiData.error ? 'content-status is-error' : 'content-status'}>
+                    <Sparkles /><strong>{aiData.status || t('history', 'readyForAnalysis')}</strong>
+                    <p>{transcriptData.markdown ? t('history', 'analysisEmptyDescription') : t('history', 'transcriptRequired')}</p>
+                    {transcriptData.markdown && <button type="button" className="button button-secondary" onClick={handleAnalyze}>{t('history', 'generateAiReport')}</button>}
                   </div>
                 )}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-      </div>
-    </motion.div>
+      </section>
+
+      <AnimatePresence>
+        {showDeleteDialog && (
+          <motion.div className="modal-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.section className="confirm-dialog" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 6, opacity: 0 }} role="alertdialog" aria-modal="true">
+              <button type="button" className="icon-button confirm-close" onClick={() => setShowDeleteDialog(false)} aria-label={t('common', 'close')} data-keyboard-cancel="true"><X /></button>
+              <span className="confirm-icon"><Trash2 /></span>
+              <h3>{t('history', 'deleteTitle')}</h3>
+              <p>{t('history', 'deleteConfirm')}</p>
+              <div className="confirm-actions">
+                <button type="button" className="button button-secondary" onClick={() => setShowDeleteDialog(false)}>{t('common', 'cancel')}</button>
+                <button type="button" className="button button-danger" onClick={handleDelete} disabled={isDeleting}>{isDeleting && <Loader2 className="spin" />}{t('common', 'delete')}</button>
+              </div>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </main>
   );
 }

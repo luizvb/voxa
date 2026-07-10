@@ -8,14 +8,17 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: '#111111',
-        foreground: '#FFFFFF',
-        card: '#1A1A1A',
-        border: 'rgba(255, 255, 255, 0.08)',
-        primary: '#00E5FF',
-        accent: '#B400FF',
-        muted: '#222222',
-        'muted-foreground': '#A1A1AA',
+        background: '#FFFFFF',
+        foreground: '#111111',
+        card: '#FFFFFF',
+        border: '#E5E5E1',
+        primary: '#111111',
+        accent: '#F3F3F0',
+        muted: '#F6F6F3',
+        'muted-foreground': '#666661',
+        success: '#287A44',
+        warning: '#9A6700',
+        danger: '#C93535',
       }
     },
   },

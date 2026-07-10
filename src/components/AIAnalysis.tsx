@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Target, MessageCircle, BarChart3, TrendingUp, CheckCircle, BrainCircuit, Activity } from 'lucide-react';
-import clsx from 'clsx';
+import { Activity, BarChart3, BrainCircuit, CheckCircle, MessageCircle, Target, TrendingUp } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface AIAnalysisProps {
@@ -9,123 +8,75 @@ interface AIAnalysisProps {
 
 export default function AIAnalysis({ analysis }: AIAnalysisProps) {
   const { t } = useLanguage();
-  
-  if (!analysis || !analysis.speakers || analysis.speakers.length === 0) {
-    return <div className="p-8 text-center text-white/50">{t('ai', 'noData')}</div>;
+  const speakers = Array.isArray(analysis?.speakers) ? analysis.speakers : [];
+  const [activeSpeaker, setActiveSpeaker] = useState(speakers[0]?.id || '');
+
+  if (!analysis || speakers.length === 0) {
+    return <div className="analysis-empty">{t('ai', 'noData')}</div>;
   }
 
-  const [activeSpeaker, setActiveSpeaker] = useState(analysis.speakers[0].id);
-
-  const speaker = analysis.speakers.find((s: any) => s.id === activeSpeaker) || analysis.speakers[0];
-
-  const getLevelColor = (level: string) => {
-    switch (level?.toUpperCase()) {
-      case 'A1':
-      case 'A2': return 'text-red-400 bg-red-400/10 border-red-400/20';
-      case 'B1': return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20';
-      case 'B2': return 'text-blue-400 bg-blue-400/10 border-blue-400/20';
-      case 'C1':
-      case 'C2': return 'text-purple-400 bg-purple-400/10 border-purple-400/20';
-      default: return 'text-gray-400 bg-gray-400/10 border-gray-400/20';
-    }
-  };
+  const speaker = speakers.find((item: any) => item.id === activeSpeaker) || speakers[0];
+  const metrics = [
+    { icon: Activity, label: t('ai', 'range'), value: speaker.proficiency?.range },
+    { icon: CheckCircle, label: t('ai', 'accuracy'), value: speaker.proficiency?.accuracy },
+    { icon: TrendingUp, label: t('ai', 'fluency'), value: speaker.proficiency?.fluency },
+    { icon: MessageCircle, label: t('ai', 'interaction'), value: speaker.proficiency?.interaction },
+  ];
 
   return (
-    <div className="flex flex-col space-y-8 animate-in fade-in duration-500 max-w-5xl mx-auto w-full pb-12">
-      {/* Summary Card */}
-      <div className="bg-[#1C1C1E] border border-white/5 rounded-2xl p-6 shadow-xl">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-white/40 mb-4 flex items-center gap-2">
-          <Target className="w-4 h-4" /> {t('ai', 'overview')}
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div>
-            <div className="text-xs text-white/30 mb-1 uppercase font-bold tracking-wider">{t('ai', 'primaryIntent')}</div>
-            <p className="text-white/90 text-sm leading-relaxed break-anywhere">{analysis.summary?.intent}</p>
-          </div>
-          <div>
-            <div className="text-xs text-white/30 mb-1 uppercase font-bold tracking-wider">{t('ai', 'summary')}</div>
-            <p className="text-white/80 text-sm leading-relaxed break-anywhere">{analysis.summary?.overview}</p>
-          </div>
+    <div className="analysis-view">
+      <section className="analysis-overview">
+        <div className="analysis-section-title"><Target /><span>{t('ai', 'overview')}</span></div>
+        <div className="analysis-overview-grid">
+          <div><small>{t('ai', 'primaryIntent')}</small><p>{analysis.summary?.intent || '—'}</p></div>
+          <div><small>{t('ai', 'summary')}</small><p>{analysis.summary?.overview || '—'}</p></div>
         </div>
-      </div>
+      </section>
 
-      {/* Speaker Selector */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 border-b border-white/10 pb-4">
-        {analysis.speakers.map((s: any) => (
+      <div className="speaker-tabs" role="tablist" aria-label={t('ai', 'speakers')}>
+        {speakers.map((item: any) => (
           <button
-            key={s.id}
-            onClick={() => setActiveSpeaker(s.id)}
-            className={clsx(
-              "px-5 py-2 rounded-full text-sm font-semibold transition-all duration-300",
-              activeSpeaker === s.id
-                ? "bg-white text-black shadow-lg scale-105"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
-            )}
+            type="button"
+            role="tab"
+            aria-selected={activeSpeaker === item.id}
+            key={item.id}
+            className={activeSpeaker === item.id ? 'is-active' : ''}
+            onClick={() => setActiveSpeaker(item.id)}
           >
-            {s.id}
+            {item.id}
           </button>
         ))}
       </div>
 
-      {/* Speaker Details */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Proficiency Radar */}
-        <div className="md:col-span-1 flex flex-col space-y-6">
-          <div className="bg-[#1C1C1E] border border-white/5 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center text-center">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/40 mb-3">{t('ai', 'cefrLevel')}</div>
-            <div className={clsx("w-24 h-24 sm:w-32 sm:h-32 rounded-full flex items-center justify-center border-4 text-4xl sm:text-5xl font-black shadow-2xl", getLevelColor(speaker.proficiency?.level))}>
-              {speaker.proficiency?.level || '?'}
-            </div>
-          </div>
+      <div className="analysis-grid">
+        <aside className="analysis-score-card">
+          <small>{t('ai', 'cefrLevel')}</small>
+          <strong>{speaker.proficiency?.level || '?'}</strong>
+          <span>{speaker.id}</span>
+        </aside>
 
-          <div className="bg-[#1C1C1E] border border-white/5 rounded-2xl p-6 shadow-xl">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-white/40 mb-4 flex items-center gap-2">
-              <BrainCircuit className="w-4 h-4" /> {t('ai', 'behavioralNlp')}
-            </h3>
-            <p className="text-white/80 text-sm leading-relaxed break-anywhere">
-              {speaker.nlp}
-            </p>
+        <section className="analysis-metrics">
+          <div className="analysis-section-title"><BarChart3 /><span>{t('ai', 'proficiencyBreakdown')}</span></div>
+          <div className="analysis-metrics-grid">
+            {metrics.map((metric) => (
+              <div key={metric.label}>
+                <span><metric.icon /> {metric.label}</span>
+                <p>{metric.value || '—'}</p>
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
+      </div>
 
-        {/* Detailed Metrics */}
-        <div className="md:col-span-2 flex flex-col space-y-6">
-          <div className="bg-[#1C1C1E] border border-white/5 rounded-2xl p-6 shadow-xl">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-white/40 mb-6 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" /> {t('ai', 'proficiencyBreakdown')}
-            </h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase text-white/30"><Activity className="w-3 h-3"/> {t('ai', 'range')}</div>
-                <p className="text-white/80 text-sm leading-relaxed break-anywhere">{speaker.proficiency?.range}</p>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase text-white/30"><CheckCircle className="w-3 h-3"/> {t('ai', 'accuracy')}</div>
-                <p className="text-white/80 text-sm leading-relaxed break-anywhere">{speaker.proficiency?.accuracy}</p>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase text-white/30"><TrendingUp className="w-3 h-3"/> {t('ai', 'fluency')}</div>
-                <p className="text-white/80 text-sm leading-relaxed break-anywhere">{speaker.proficiency?.fluency}</p>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase text-white/30"><MessageCircle className="w-3 h-3"/> {t('ai', 'interaction')}</div>
-                <p className="text-white/80 text-sm leading-relaxed break-anywhere">{speaker.proficiency?.interaction}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6 shadow-xl">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-blue-400 mb-2">
-              {t('ai', 'actionableFeedback')}
-            </h3>
-            <p className="text-white/90 text-sm leading-relaxed break-anywhere">
-              {speaker.feedback}
-            </p>
-          </div>
-        </div>
-
+      <div className="analysis-notes-grid">
+        <section>
+          <div className="analysis-section-title"><BrainCircuit /><span>{t('ai', 'behavioralNlp')}</span></div>
+          <p>{speaker.nlp || '—'}</p>
+        </section>
+        <section className="analysis-feedback">
+          <div className="analysis-section-title"><TrendingUp /><span>{t('ai', 'actionableFeedback')}</span></div>
+          <p>{speaker.feedback || '—'}</p>
+        </section>
       </div>
     </div>
   );

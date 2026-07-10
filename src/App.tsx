@@ -1,227 +1,287 @@
-import { useCallback, useState, useEffect } from 'react';
-import Dashboard from './components/Dashboard';
-import Sidebar from './components/Sidebar';
-import HistoryView from './components/HistoryView';
-import MiniWidget from './components/MiniWidget';
-import MarketingSite from './components/MarketingSite';
-import Onboarding from './components/Onboarding';
-import clsx from 'clsx';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Plus, X } from 'lucide-react';
+import ComponentsShowcase from './components/ComponentsShowcase';
+import Dashboard from './components/Dashboard';
+import HistoryView from './components/HistoryView';
+import Login from './components/Login';
+import MiniWidget from './components/MiniWidget';
+import Onboarding from './components/Onboarding';
+import Sidebar from './components/Sidebar';
+import { useAuth } from './hooks/useAuth';
 import { useKeyboardActions } from './hooks/useKeyboardActions';
-import { useAuth0 } from '@auth0/auth0-react';
+import { useLanguage } from './contexts/LanguageContext';
+
+export type AppView = 'workspace' | 'library';
+export type LibraryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface Recording {
+  id: string;
+  name: string;
+  durationMs: number;
+  createdAt?: string;
+  transcript?: any;
+  playbackUrl?: string;
+}
 
 export default function App() {
-  const { isAuthenticated, isLoading } = useAuth0();
-  const [activeTab, setActiveTab] = useState('home');
+  const { isAuthenticated, isLoading } = useAuth();
+  const { t } = useLanguage();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>('workspace');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isCompact, setIsCompact] = useState(false);
   const [isWidget, setIsWidget] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const isElectronApp = typeof window !== 'undefined' && Boolean(window.recorder);
-
-  const [recordings, setRecordings] = useState<any[]>([]);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [libraryStatus, setLibraryStatus] = useState<LibraryStatus>('idle');
+  const [libraryError, setLibraryError] = useState('');
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [autoProcessRecordingId, setAutoProcessRecordingId] = useState<string | null>(null);
 
+  const isElectronApp = typeof window !== 'undefined' && Boolean(window.recorder);
+  const isUiPreview = import.meta.env.DEV && window.location.hash === '#/ui';
+  const sidebarCollapsed = isCompact || !isSidebarOpen;
+
   const loadRecordings = useCallback(async () => {
+    if (!window.recorder) return;
+
+    setLibraryStatus('loading');
+    setLibraryError('');
+    let timeoutId: number | undefined;
     try {
-      if (!window.recorder) return;
-      const data = await window.recorder.listRecordings();
-      setRecordings(data);
-    } catch (e) {
-      console.error(e);
+      const data = await Promise.race([
+        window.recorder.listRecordings(),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error(t('common', 'serviceUnavailable'))), 6000);
+        }),
+      ]);
+      setRecordings(Array.isArray(data) ? data : []);
+      setLibraryStatus('ready');
+    } catch (error: any) {
+      setLibraryStatus('error');
+      setLibraryError(error?.message || t('common', 'serviceUnavailable'));
+    } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
     }
+  }, [t]);
+
+  const handleSelectRecording = useCallback((id: string | null, autoProcess = false) => {
+    setSelectedRecordingId(id);
+    setAutoProcessRecordingId(autoProcess && id ? id : null);
+    setActiveView('library');
   }, []);
 
   useEffect(() => {
-    if (window.location.hash === '#/widget') {
-      setIsWidget(true);
-    }
+    setIsWidget(window.location.hash === '#/widget');
+    setShowOnboarding(!localStorage.getItem('voxa_has_seen_onboarding'));
+
+    const query = window.matchMedia('(max-width: 959px)');
+    const syncCompactMode = () => setIsCompact(query.matches);
+    syncCompactMode();
+    query.addEventListener('change', syncCompactMode);
+    return () => query.removeEventListener('change', syncCompactMode);
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadRecordings().then(() => {
-        const pending = localStorage.getItem('pendingRecordingId');
-        if (pending) {
-          localStorage.removeItem('pendingRecordingId');
-          handleSelectRecording(pending, true);
-        }
-      });
-      const hasSeenOnboarding = localStorage.getItem('voxa_has_seen_onboarding');
-      if (!hasSeenOnboarding) {
-        setShowOnboarding(true);
-      }
-    }
-  }, [isAuthenticated, loadRecordings]);
+    if (!isElectronApp || isLoading) return;
+    loadRecordings();
+  }, [isElectronApp, isLoading, loadRecordings]);
+
+  useEffect(() => {
+    const handleShowLogin = () => setShowLoginModal(true);
+    window.addEventListener('auth:show-login', handleShowLogin);
+    return () => window.removeEventListener('auth:show-login', handleShowLogin);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    setShowLoginModal(false);
+    const pending = localStorage.getItem('pendingRecordingId');
+    if (pending) {
+      localStorage.removeItem('pendingRecordingId');
+      loadRecordings().then(() => handleSelectRecording(pending, true));
+    }
+  }, [handleSelectRecording, isAuthenticated, loadRecordings]);
+
+  useEffect(() => {
+    if (!isElectronApp) return;
     window.addEventListener('recordings:changed', loadRecordings);
     return () => window.removeEventListener('recordings:changed', loadRecordings);
-  }, [isAuthenticated, loadRecordings]);
+  }, [isElectronApp, loadRecordings]);
 
-  const handleSelectRecording = (id: string | null, autoProcess = false) => {
+  const handleRecordingComplete = useCallback((id: string) => {
     setSelectedRecordingId(id);
-    setAutoProcessRecordingId(autoProcess ? id : null);
-    if (id) {
-      setActiveTab('history');
-    }
-  };
+    loadRecordings();
 
-  const handleEscape = useCallback(() => {
-    if (isSidebarOpen) {
-      setIsSidebarOpen(false);
+    if (!isAuthenticated) {
+      localStorage.setItem('pendingRecordingId', id);
+      setShowLoginModal(true);
       return;
     }
 
-    if (selectedRecordingId) {
-      handleSelectRecording(null);
-    }
-  }, [isSidebarOpen, selectedRecordingId]);
-
-  useKeyboardActions({ enabled: isElectronApp && !isWidget, onEscape: handleEscape });
-
-  if (isWidget) {
-    return <MiniWidget />;
-  }
-
-  if (!isElectronApp) {
-    return <MarketingSite />;
-  }
-
-  if (isLoading) {
-    return (
-      <div className="h-screen w-screen bg-background flex flex-col drag-region">
-        <div className="safe-top shrink-0" />
-        <div className="flex-1 flex items-center justify-center no-drag px-4 text-sm text-white/60">
-          Loading authentication...
-        </div>
-      </div>
-    );
-  }
-
+    setAutoProcessRecordingId(id);
+    setActiveView('library');
+  }, [isAuthenticated, loadRecordings]);
 
   const completeOnboarding = () => {
     localStorage.setItem('voxa_has_seen_onboarding', 'true');
     setShowOnboarding(false);
+    setActiveView('workspace');
+    window.setTimeout(() => document.querySelector<HTMLInputElement>('[data-recording-title]')?.focus(), 120);
   };
 
+  const handleEscape = useCallback(() => {
+    if (showLoginModal) {
+      setShowLoginModal(false);
+      return;
+    }
+    if (selectedRecordingId) setSelectedRecordingId(null);
+  }, [selectedRecordingId, showLoginModal]);
+
+  useKeyboardActions({ enabled: isElectronApp && !isWidget, onEscape: handleEscape });
+
+  if (isUiPreview) return <ComponentsShowcase />;
+  if (isWidget) return <MiniWidget />;
+  if (!isElectronApp) return null;
+
+  if (isLoading) {
+    return (
+      <div className="app-loading drag-region">
+        <div className="app-loading-mark" aria-hidden>V</div>
+        <span>{t('common', 'loading')}</span>
+      </div>
+    );
+  }
+
+  const pageTitle = activeView === 'workspace'
+    ? t('navigation', 'workspace')
+    : selectedRecordingId
+      ? t('navigation', 'conversation')
+      : t('navigation', 'library');
+
   return (
-    <div className="flex h-screen w-screen bg-background overflow-hidden text-foreground">
+    <div className="app-shell">
       <AnimatePresence>
-        {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
-      </AnimatePresence>
-      {/* Mobile sidebar overlay backdrop */}
-      <AnimatePresence>
-        {isSidebarOpen && (
+        {showLoginModal && (
           <motion.div
-            key="sidebar-overlay"
+            className="modal-layer no-drag"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/40 z-40 sm:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Sidebar */}
-      <div
-        className={clsx(
-          "shrink-0 bg-[#1e1e1e]/50 border-r border-white/10 flex flex-col safe-top drag-region sidebar-transition z-50",
-          // Desktop: always visible, toggle width
-          "hidden sm:flex",
-          isSidebarOpen ? "sm:w-[260px]" : "sm:w-[72px]",
-        )}
-      >
-        <Sidebar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          collapsed={!isSidebarOpen}
-          onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-          recordings={recordings}
-          selectedRecordingId={selectedRecordingId}
-          onSelectRecording={handleSelectRecording}
-        />
-      </div>
-
-      {/* Mobile sidebar — slides in as overlay */}
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <motion.div
-            key="mobile-sidebar"
-            initial={{ x: -280 }}
-            animate={{ x: 0 }}
-            exit={{ x: -280 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-            className="fixed top-0 left-0 bottom-0 w-[280px] bg-[#1e1e1e] border-r border-white/10 flex flex-col safe-top z-50 sm:hidden shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('login', 'title')}
           >
-            <Sidebar
-              activeTab={activeTab}
-              onTabChange={(tab) => {
-                setActiveTab(tab);
-                setIsSidebarOpen(false);
-              }}
-              collapsed={false}
-              onToggle={() => setIsSidebarOpen(false)}
-              recordings={recordings}
-              selectedRecordingId={selectedRecordingId}
-              onSelectRecording={(id) => {
-                handleSelectRecording(id);
-                setIsSidebarOpen(false);
-              }}
-            />
+            <motion.div
+              className="auth-modal"
+              initial={{ opacity: 0, y: 12, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.99 }}
+              transition={{ duration: 0.16 }}
+            >
+              <button
+                type="button"
+                className="icon-button auth-modal-close"
+                onClick={() => setShowLoginModal(false)}
+                aria-label={t('common', 'close')}
+                data-keyboard-cancel="true"
+              >
+                <X />
+              </button>
+              <Login />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-[#121212] safe-top drag-region min-w-0">
-        {/* Mobile Header Toggle */}
-        <div className="sm:hidden flex items-center px-4 pb-2 no-drag border-b border-white/5 shrink-0">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 bg-white/5 rounded-lg text-white hover:bg-white/10 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-          </button>
-        </div>
+      <AnimatePresence>
+        {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
+      </AnimatePresence>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden no-drag p-4 sm:p-6 relative thin-scrollbar">
-          <AnimatePresence mode="wait">
-            {activeTab === 'home' && (
+      <aside className={sidebarCollapsed ? 'app-sidebar is-collapsed' : 'app-sidebar'}>
+        <Sidebar
+          activeView={activeView}
+          onViewChange={(view) => {
+            setActiveView(view);
+            if (view === 'workspace') setSelectedRecordingId(null);
+          }}
+          collapsed={sidebarCollapsed}
+          showToggle={!isCompact}
+          onToggle={() => setIsSidebarOpen((value) => !value)}
+        />
+      </aside>
+
+      <section className="app-main drag-region">
+        <header className="app-toolbar no-drag">
+          <div>
+            <span className="toolbar-kicker">Voxa</span>
+            <h1>{pageTitle}</h1>
+          </div>
+          {activeView === 'library' && (
+            <button
+              type="button"
+              className="button button-primary toolbar-action"
+              onClick={() => {
+                setSelectedRecordingId(null);
+                setActiveView('workspace');
+              }}
+            >
+              <Plus />
+              {t('navigation', 'newRecording')}
+            </button>
+          )}
+        </header>
+
+        <div className="app-content no-drag">
+          <AnimatePresence mode="wait" initial={false}>
+            {activeView === 'workspace' ? (
               <motion.div
-                key="home"
-                initial={{ opacity: 0, y: 10 }}
+                key="workspace"
+                className="view-frame"
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14 }}
               >
-                <Dashboard onRecordingComplete={(id, autoProcess) => handleSelectRecording(id, autoProcess)} />
+                <Dashboard
+                  recordings={recordings}
+                  libraryStatus={libraryStatus}
+                  onRetry={loadRecordings}
+                  onOpenLibrary={() => {
+                    setSelectedRecordingId(null);
+                    setActiveView('library');
+                  }}
+                  onSelectRecording={handleSelectRecording}
+                  onRecordingComplete={handleRecordingComplete}
+                />
               </motion.div>
-            )}
-            {activeTab === 'history' && (
+            ) : (
               <motion.div
-                key="history"
-                initial={{ opacity: 0, y: 10 }}
+                key="library"
+                className="view-frame"
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full"
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.14 }}
               >
                 <HistoryView
                   recordings={recordings}
                   selectedId={selectedRecordingId}
                   onSelect={handleSelectRecording}
                   loadRecordings={loadRecordings}
+                  libraryStatus={libraryStatus}
+                  libraryError={libraryError}
+                  onRetry={loadRecordings}
+                  onStartRecording={() => setActiveView('workspace')}
                   autoProcess={autoProcessRecordingId === selectedRecordingId}
                 />
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
