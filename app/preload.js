@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+ipcRenderer.on('recordings:changed', (_event, recording) => {
+  window.dispatchEvent(new CustomEvent('recordings:changed', { detail: recording }));
+});
+
 contextBridge.exposeInMainWorld('recorder', {
   probe: () => ipcRenderer.invoke('recorder:probe'),
   recordSimulated: (outputDir, seconds) => ipcRenderer.invoke('recorder:record-simulated', outputDir, seconds),
@@ -13,6 +17,11 @@ contextBridge.exposeInMainWorld('recorder', {
   analyzeWithLLM: (recordingId) => ipcRenderer.invoke('llm:analyze', { recordingId }),
   getAnalysis: (recordingId) => ipcRenderer.invoke('llm:get-analysis', { recordingId }),
   resizeWindow: (width, height) => ipcRenderer.invoke('window:resize', width, height),
+  getShortcutSettings: () => ipcRenderer.invoke('shortcuts:get'),
+  setRecordShortcut: (shortcut) => ipcRenderer.invoke('shortcuts:set-record', shortcut),
+  openMicrophoneSettings: () => ipcRenderer.invoke('microphone:open-settings'),
   onShortcutRecord: (callback) => ipcRenderer.on('shortcut:record', callback),
-  removeShortcutRecord: (callback) => ipcRenderer.removeListener('shortcut:record', callback)
+  removeShortcutRecord: (callback) => ipcRenderer.removeListener('shortcut:record', callback),
+  hideWidget: () => ipcRenderer.send('widget:hide'),
+  showDashboard: () => ipcRenderer.send('app:show-dashboard')
 });

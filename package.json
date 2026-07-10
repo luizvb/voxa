@@ -24,7 +24,7 @@
   "main": "app/main.js",
   "scripts": {
     "build:go": "go build -o bin/recorderd ./cmd/recorderd",
-    "dev:vite": "vite",
+    "dev:vite": "vite --port 5173 --strictPort",
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "dev": "npm run build:go && concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "build:react": "vite build",
@@ -65,8 +65,11 @@
     }
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.21.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",
+    "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^3.6.0"

@@ -1,4 +1,5 @@
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const { loadEnvFile } = require('./env-loader');
 
 loadEnvFile(path.join(__dirname, '..', '.env'));
@@ -7,22 +8,83 @@ const { app, BrowserWindow, desktopCapturer, ipcMain, session, shell, protocol, 
 
 let tray = null;
 let isQuitting = false;
+let mainWindow = null;
+let widgetWindow = null;
+const DEFAULT_RECORD_SHORTCUT = 'Option+Space';
+const SHORTCUT_OPTIONS = ['Option+Space', 'CommandOrControl+Shift+Space', 'Option+R'];
+let recordShortcut = DEFAULT_RECORD_SHORTCUT;
+let registeredRecordShortcut = null;
 const { spawnFile } = require('./sidecar');
-const { getRecording, getTranscript, listRecordings, recordingsRoot, saveRecording, saveTranscript, deleteRecording, saveAnalysis, getAnalysis } = require('./session-store');
-const { transcribeWithDeepgram } = require('./transcription-service');
-const { analyzeTranscriptWithOpenRouter } = require('./openrouter-service');
+const API_URL = process.env.VITE_API_URL || 'http://localhost:3000';
 const { pathToFileURL } = require('node:url');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'local-media', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true } }
 ]);
 
-function createWindow() {
-  const win = new BrowserWindow({
-    width: 860,
-    height: 560,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 20 },
+const dockIconPath = path.join(__dirname, 'dockIcon.png');
+
+const showDockIcon = () => {
+  if (process.platform !== 'darwin') return;
+
+  app.setActivationPolicy('regular');
+  app.dock.show();
+  app.dock.setIcon(dockIconPath);
+};
+
+const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
+
+async function readSettings() {
+  try {
+    const raw = await fs.readFile(settingsPath(), 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function writeSettings(nextSettings) {
+  await fs.mkdir(path.dirname(settingsPath()), { recursive: true });
+  await fs.writeFile(settingsPath(), JSON.stringify(nextSettings, null, 2));
+}
+
+function notifyRecordShortcut() {
+  if (widgetWindow) {
+    if (!widgetWindow.isVisible()) {
+      widgetWindow.showInactive();
+    }
+    widgetWindow.webContents.send('shortcut:record');
+  }
+  if (mainWindow) {
+    mainWindow.webContents.send('shortcut:record');
+  }
+}
+
+function registerRecordShortcut(accelerator) {
+  if (registeredRecordShortcut) {
+    globalShortcut.unregister(registeredRecordShortcut);
+    registeredRecordShortcut = null;
+  }
+
+  const registered = globalShortcut.register(accelerator, notifyRecordShortcut);
+  if (!registered) return false;
+
+  registeredRecordShortcut = accelerator;
+  recordShortcut = accelerator;
+  return true;
+}
+
+const createWidgetWindow = () => {
+  if (widgetWindow) return widgetWindow;
+
+  widgetWindow = new BrowserWindow({
+    width: 360,
+    height: 104,
+    show: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -30,18 +92,53 @@ function createWindow() {
     }
   });
 
-  win.on('close', (event) => {
+  widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  if (process.env.NODE_ENV === 'development') {
+    widgetWindow.loadURL('http://localhost:5173/#/widget');
+  } else {
+    widgetWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: 'widget' });
+  }
+
+  widgetWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      win.hide();
+      widgetWindow.hide();
+    }
+    return false;
+  });
+
+  return widgetWindow;
+};
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1024,
+    height: 720,
+    minWidth: 800,
+    minHeight: 600,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 20, y: 20 },
+    icon: dockIconPath,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
     }
     return false;
   });
 
   if (process.env.NODE_ENV === 'development') {
-    win.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:5173');
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 }
 
@@ -54,11 +151,15 @@ ipcMain.handle('recorder:record-simulated', async (_event, outputDir, seconds = 
 });
 
 ipcMain.handle('recordings:root', async () => {
-  return recordingsRoot(app.getPath('userData'));
+  return path.join(app.getPath('userData'), 'recordings');
 });
 
-ipcMain.handle('recordings:list', async () => {
-  const recordings = await listRecordings(app.getPath('userData'));
+ipcMain.handle('recordings:list', async (_event, input = {}) => {
+  const response = await fetch(`${API_URL}/api/recordings`, {
+    headers: { 'x-user-id': input.userId || 'local-user' }
+  });
+  if (!response.ok) return [];
+  const recordings = await response.json();
   return recordings.map((recording) => ({
     ...recording,
     playbackUrl: `local-media://${recording.file}`
@@ -66,60 +167,123 @@ ipcMain.handle('recordings:list', async () => {
 });
 
 ipcMain.handle('recordings:save', async (_event, input) => {
-  const metadata = await saveRecording(app.getPath('userData'), {
-    ...input,
-    bytes: Buffer.from(input.bytes)
+  const formData = new FormData();
+  formData.append('audio', new Blob([Buffer.from(input.bytes)], { type: input.mimeType || 'audio/webm' }), 'recording.webm');
+  if (input.name) formData.append('name', input.name);
+  if (input.durationMs) formData.append('durationMs', String(input.durationMs));
+  if (input.mode) formData.append('mode', input.mode);
+  if (input.mimeType) formData.append('mimeType', input.mimeType);
+
+  const response = await fetch(`${API_URL}/api/recordings`, {
+    method: 'POST',
+    headers: { 'x-user-id': input.userId || 'local-user' },
+    body: formData
   });
 
-  return {
+  if (!response.ok) {
+    throw new Error('Failed to save recording to backend');
+  }
+
+  const metadata = await response.json();
+  const savedRecording = {
     ...metadata,
     playbackUrl: `local-media://${metadata.file}`
   };
+
+  if (mainWindow) mainWindow.webContents.send('recordings:changed', savedRecording);
+  if (widgetWindow) widgetWindow.webContents.send('recordings:changed', savedRecording);
+
+  return savedRecording;
 });
 
 ipcMain.handle('recordings:open-folder', async () => {
-  const root = recordingsRoot(app.getPath('userData'));
+  // Folder no longer heavily used, but keep backward compatibility
+  const root = path.join(app.getPath('userData'), 'recordings');
+  await fs.mkdir(root, { recursive: true });
   await shell.openPath(root);
   return root;
 });
 
 ipcMain.handle('recordings:delete', async (_event, id) => {
-  return deleteRecording(app.getPath('userData'), id);
+  // Mocked for now, needs backend endpoint if requested later
+  return true;
+});
+
+ipcMain.handle('shortcuts:get', async () => {
+  return {
+    record: recordShortcut,
+    options: SHORTCUT_OPTIONS
+  };
+});
+
+ipcMain.handle('shortcuts:set-record', async (_event, nextShortcut) => {
+  if (!SHORTCUT_OPTIONS.includes(nextShortcut)) {
+    throw new Error('Unsupported shortcut');
+  }
+
+  const previousShortcut = recordShortcut;
+  if (previousShortcut !== nextShortcut && !registerRecordShortcut(nextShortcut)) {
+    registerRecordShortcut(previousShortcut);
+    throw new Error(`${nextShortcut} is already used by another app or macOS.`);
+  }
+
+  const settings = await readSettings();
+  await writeSettings({ ...settings, recordShortcut: nextShortcut });
+
+  return {
+    record: recordShortcut,
+    options: SHORTCUT_OPTIONS
+  };
+});
+
+ipcMain.handle('microphone:open-settings', async () => {
+  if (process.platform === 'darwin') {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
+    return true;
+  }
+
+  return false;
 });
 
 ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
-  const recording = await getRecording(app.getPath('userData'), input.recordingId);
-  const result = await transcribeWithDeepgram({
-    apiKey: process.env.DEEPGRAM_API_KEY,
-    filePath: recording.file,
-    mimeType: recording.mimeType,
-    maxQuality: Boolean(input.maxQuality)
+  const response = await fetch(`${API_URL}/api/recordings/${input.recordingId}/transcribe`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'x-user-id': input.userId || 'local-user' 
+    },
+    body: JSON.stringify({ maxQuality: Boolean(input.maxQuality) })
   });
 
-  return saveTranscript(app.getPath('userData'), input.recordingId, result);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Transcription failed: ${errorBody}`);
+  }
+  
+  return response.json();
 });
 
 ipcMain.handle('transcriptions:get', async (_event, input) => {
-  return getTranscript(app.getPath('userData'), input.recordingId);
+  // Since we don't have a GET endpoint for transcripts right now, return empty or throw
+  // Normally the transcript is returned by the POST or via the list recordings
+  return { markdown: '' };
 });
 
 ipcMain.handle('llm:analyze', async (_event, input) => {
-  const { recordingId } = input;
-  const transcript = await getTranscript(app.getPath('userData'), recordingId);
+  const response = await fetch(`${API_URL}/api/recordings/${input.recordingId}/analyze`, {
+    method: 'POST',
+    headers: { 'x-user-id': input.userId || 'local-user' }
+  });
 
-  if (!transcript || !transcript.markdown) {
-    throw new Error('No transcript available to analyze.');
+  if (!response.ok) {
+    throw new Error('Analysis failed');
   }
 
-  const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite-preview-07-24';
-  const apiKey = process.env.OPENROUTER_API_KEY;
-
-  const analysis = await analyzeTranscriptWithOpenRouter(apiKey, transcript.markdown, model);
-  return saveAnalysis(app.getPath('userData'), recordingId, analysis);
+  return response.json();
 });
 
 ipcMain.handle('llm:get-analysis', async (_event, input) => {
-  return getAnalysis(app.getPath('userData'), input.recordingId);
+  return null; // Mocked
 });
 
 ipcMain.handle('window:resize', (event, width, height) => {
@@ -129,7 +293,24 @@ ipcMain.handle('window:resize', (event, width, height) => {
   }
 });
 
-app.whenReady().then(() => {
+ipcMain.on('widget:hide', () => {
+  if (widgetWindow) {
+    widgetWindow.hide();
+  }
+});
+
+ipcMain.on('app:show-dashboard', () => {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+    showDockIcon();
+  }
+  if (widgetWindow) {
+    widgetWindow.hide();
+  }
+});
+
+app.whenReady().then(async () => {
   protocol.handle('local-media', (request) => {
     return net.fetch('file://' + request.url.replace('local-media://', ''));
   });
@@ -143,6 +324,9 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+  createWidgetWindow();
+
+  showDockIcon();
 
   // Create Tray
   const iconPath = path.join(__dirname, 'trayTemplate.png');
@@ -153,17 +337,17 @@ app.whenReady().then(() => {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Open Recorder', click: () => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win) {
-          win.show();
-          win.focus();
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+          showDockIcon();
         }
       }
     },
     {
       label: 'Toggle Recording', click: () => {
-        const win = BrowserWindow.getAllWindows()[0];
-        if (win) win.webContents.send('shortcut:record');
+        if (mainWindow) mainWindow.webContents.send('shortcut:record');
+        if (widgetWindow) widgetWindow.webContents.send('shortcut:record');
       }
     },
     { type: 'separator' },
@@ -176,19 +360,20 @@ app.whenReady().then(() => {
   ]);
   tray.setContextMenu(contextMenu);
 
-  // Global Shortcut
-  globalShortcut.register('CommandOrControl+Shift+R', () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.webContents.send('shortcut:record');
-    }
-  });
+  const settings = await readSettings();
+  const configuredShortcut = SHORTCUT_OPTIONS.includes(settings.recordShortcut)
+    ? settings.recordShortcut
+    : DEFAULT_RECORD_SHORTCUT;
+
+  if (!registerRecordShortcut(configuredShortcut) && configuredShortcut !== DEFAULT_RECORD_SHORTCUT) {
+    registerRecordShortcut(DEFAULT_RECORD_SHORTCUT);
+  }
 
   app.on('activate', () => {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) {
-      win.show();
-      win.focus();
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+      showDockIcon();
     } else {
       createWindow();
     }

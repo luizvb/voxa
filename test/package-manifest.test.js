@@ -20,6 +20,16 @@ test('package exposes build and test scripts for Go sidecar', () => {
   assert.match(pkg.scripts['test:go'], /go test/);
 });
 
+test('electron keeps the macOS Dock icon visible while the app is running', () => {
+  const main = fs.readFileSync(path.join(root, 'app', 'main.js'), 'utf8');
+
+  assert.match(main, /setActivationPolicy\('regular'\)/);
+  assert.match(main, /showDockIcon/);
+  assert.match(main, /dockIcon\.png/);
+  assert.doesNotMatch(main, /app\.dock\.hide/);
+  assert.equal(fs.existsSync(path.join(root, 'app', 'dockIcon.png')), true);
+});
+
 test('environment files are configured safely', () => {
   const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf8');
   const envExample = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
