@@ -9,7 +9,7 @@ const CATEGORIES: EvalCategory[] = ['normal', 'incomplete', 'ambiguous', 'long',
 const DIMENSIONS: EvalDimension[] = ['factuality', 'coverage', 'specificity', 'depth', 'actionability', 'calibration', 'executiveQuality'];
 const LABELS: Record<string, string> = { interview: 'Interview', language: 'Language', meeting: 'Meeting', normal: 'Normal', incomplete: 'Incomplete', ambiguous: 'Ambiguous', long: 'Long', contradictory: 'Contradictory', adversarial: 'Adversarial', factuality: 'Factuality', coverage: 'Coverage', specificity: 'Specificity', depth: 'Depth', actionability: 'Actionability', calibration: 'Calibration', executiveQuality: 'Executive quality' };
 
-const defaultConfig: EvalRunConfig = { caseCount: 6, language: 'pt-BR', outputLanguage: 'pt-BR', modes: [...MODES], difficulty: 'hard', categories: ['normal', 'incomplete', 'ambiguous', 'contradictory', 'adversarial'], insightModel: 'google/gemini-3.1-flash-lite', supervisorModel: 'anthropic/claude-sonnet-4.6', systemPrompt: '', supervisorPrompt: '' };
+const defaultConfig: EvalRunConfig = { caseCount: 6, language: 'pt-BR', outputLanguage: 'pt-BR', modes: [...MODES], difficulty: 'hard', categories: ['normal', 'incomplete', 'ambiguous', 'contradictory', 'adversarial'], insightModel: 'google/gemini-3.1-flash-lite', supervisorModel: 'anthropic/claude-haiku-4.5', systemPrompt: '', supervisorPrompt: '' };
 const terminal = (status?: string) => ['completed', 'completed_with_errors', 'canceled'].includes(status || '');
 const formatMoney = (value = 0) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(value);
 const formatDuration = (value = 0) => value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${Math.round(value)}ms`;

@@ -20,7 +20,7 @@ test('PDF report HTML includes every selected analysis mode', () => {
   });
 
   assert.match(html, /Interview analysis/);
-  assert.match(html, /Language analysis/);
+  assert.match(html, /Language lesson analysis/);
   assert.match(html, /Meeting analysis/);
   assert.match(html, /Leadership interview/);
   assert.match(html, /@page \{ size: A4/);

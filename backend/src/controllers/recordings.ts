@@ -365,7 +365,7 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
     
     const transcript = tRows[0];
     const apiKey = process.env.OPENROUTER_API_KEY || '';
-    const model = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite-preview-07-24';
+    const model = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite';
 
     const modes = normalizeAnalysisModes(req.body?.modes);
     const outputLanguage = typeof req.body?.outputLanguage === 'string' ? req.body.outputLanguage : 'pt-BR';
