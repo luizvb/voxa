@@ -153,6 +153,8 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 /* Sidebar */
 .sidebar-panel { display: flex; height: 100%; flex-direction: column; overflow: visible; }
 .sidebar-header { min-height: 112px; display: flex; align-items: flex-end; gap: 8px; padding: 52px 10px 12px; border-bottom: 1px solid var(--line); }
+.app-shell.is-web .app-toolbar { min-height: 80px; flex-basis: 80px; padding-top: 16px; }
+.app-shell.is-web .sidebar-header { min-height: 80px; padding-top: 16px; }
 .brand-button { display: flex; min-height: 44px; flex: 1; align-items: center; gap: 10px; border-radius: var(--radius); padding: 4px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .brand-button:hover { background: var(--surface); }
 .brand-mark { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border-radius: 9px; background: #10131b; color: #ffffff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }

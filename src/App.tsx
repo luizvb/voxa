@@ -159,7 +159,7 @@ export default function App() {
       : t('navigation', 'library');
 
   return (
-    <div className="app-shell">
+    <div className={isElectronApp ? 'app-shell is-electron' : 'app-shell is-web'}>
       <AnimatePresence>
         {showLoginModal && (
           <motion.div
