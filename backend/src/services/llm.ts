@@ -120,7 +120,110 @@ export function normalizeAnalysisModes(value: unknown): AnalysisMode[] {
   return uniqueModes.length > 0 ? uniqueModes : ['language'];
 }
 
-const evidenceSchema = `{"speaker":"","quote":"exact consecutive transcript quote"}`;
+const evidenceExample = { speaker: '', quote: 'exact consecutive transcript quote' };
+
+export const ANALYSIS_CONTRACT_VERSION = '4.0';
+
+export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<string, any> {
+  const selected = (mode: AnalysisMode, value: Record<string, any>) => modes.includes(mode) ? value : null;
+  const evidence = () => [{ ...evidenceExample }];
+  const skill = () => ({ score: null, observation: '', evidence: evidence() });
+  return {
+    version: ANALYSIS_CONTRACT_VERSION,
+    analysisModes: modes,
+    summary: {
+      title: 'short factual title',
+      purpose: { statement: 'explicit purpose or not determinable', evidence: evidence() },
+      executiveBrief: { statement: '2-4 sentence factual synthesis', evidence: evidence() },
+      keyPoints: [{ statement: '', category: 'fact|decision|risk|learning|coaching', evidence: evidence() }],
+      language: 'output language'
+    },
+    evidenceQuality: {
+      level: 'high|medium|low',
+      coverage: { speakerLabels: 'clear|partial|unclear', substantiveTurns: null, selectedModeFit: 'high|medium|low' },
+      reasons: [],
+      limitations: []
+    },
+    interview: selected('interview', {
+      context: {
+        interviewType: 'screening|behavioral|technical|case|mixed|unknown',
+        stage: 'explicit stage or unknown',
+        targetRole: null,
+        candidate: null,
+        interviewers: [],
+        criteriaAvailable: false,
+        evidence: evidence()
+      },
+      executiveAssessment: {
+        overallScore: null,
+        scoreConfidence: 'high|medium|low',
+        outcomeForecast: 'likely_advance|uncertain|likely_not_advance',
+        rationale: '',
+        evidence: evidence(),
+        caveat: ''
+      },
+      strengths: [{ signal: '', demonstratedBy: '', hiringRelevance: '', evidence: evidence() }],
+      concerns: [{ signal: '', severity: 'high|medium|low', observedIssue: '', missingProof: '', verificationQuestion: '', evidence: evidence() }],
+      contradictions: [{ topic: '', firstStatement: '', secondStatement: '', whyItMatters: '', verificationQuestion: '', evidence: evidence() }],
+      competencies: [{ name: '', score: null, confidence: 'high|medium|low', demonstrated: '', missing: '', evidence: evidence() }],
+      questionReviews: [{
+        question: '', askedBy: null, answeredBy: null, answerSummary: '', score: null,
+        dimensions: { relevance: null, specificity: null, structure: null, evidence: null, ownership: null, impact: null },
+        whatWorked: [], improve: [], betterAnswerOutline: '', followUps: [], evidence: evidence()
+      }],
+      coaching: {
+        priorities: [{ priority: 1, focus: '', basedOn: '', actions: [], successMetric: '', evidence: evidence() }],
+        candidateQuestions: [{ question: '', whyAsk: '', evidence: evidence() }],
+        practiceQuestions: [{ question: '', why: '', targetSignal: '', evidence: evidence() }]
+      }
+    }),
+    languageClass: selected('language', {
+      lessonContext: {
+        objective: '', targetLanguage: '', learnerSpeakers: [], teacherSpeakers: [], topics: [], evidence: evidence()
+      },
+      learnerProfiles: [{
+        speaker: '',
+        cefr: { level: 'A1|A2|B1|B2|C1|C2|unknown', confidence: 'high|medium|low', rationale: '' },
+        evidenceSufficiency: 'high|medium|low',
+        overallAssessment: '',
+        skills: {
+          grammar: skill(), vocabulary: skill(), fluency: skill(), coherence: skill(), interaction: skill(), intelligibility: skill()
+        },
+        strengths: [{ signal: '', whyItMatters: '', evidence: evidence() }],
+        priorities: [{ signal: '', pattern: '', communicationImpact: '', nextStep: '', evidence: evidence() }],
+        participation: { share: 'dominant|balanced|limited|unknown', interactionPattern: '', evidence: evidence() },
+        teacherFeedback: ''
+      }],
+      languagePatterns: [{ category: 'grammar|vocabulary|fluency|coherence|interaction|register', pattern: '', frequency: 'single|repeated', impact: '', evidence: evidence() }],
+      corrections: [{ speaker: '', category: 'grammar|vocabulary|naturalness|coherence|register', original: 'exact transcript quote', corrected: '', explanation: '', rule: '', recurrence: 'single|repeated', priority: 'high|medium|low', evidence: evidence() }],
+      lessonProgress: {
+        successfulUse: [{ skill: '', whySuccessful: '', evidence: evidence() }],
+        selfCorrections: [{ observation: '', significance: '', evidence: evidence() }],
+        missedOpportunities: [{ opportunity: '', coachPrompt: '', evidence: evidence() }]
+      },
+      teacherPlan: {
+        reinforce: [{ focus: '', reason: '', evidence: evidence() }],
+        nextLessonFocus: [{ focus: '', why: '', activities: [], successMetric: '', evidence: evidence() }],
+        homework: [{ task: '', durationMinutes: null, successMetric: '', basedOn: '', evidence: evidence() }]
+      }
+    }),
+    meeting: selected('meeting', {
+      meetingContext: { purpose: '', participants: [], topics: [], evidence: evidence() },
+      executiveBrief: { outcome: '', whatChanged: [], needsDecision: [], needsEscalation: [], evidence: evidence() },
+      decisions: [{ decision: '', impact: '', rationale: '', owner: null, evidence: evidence() }],
+      actionItems: [{ task: '', owner: null, dueDate: null, status: 'open', dependency: null, evidence: evidence() }],
+      proposals: [{ proposal: '', proposedBy: null, status: 'open|accepted|rejected|deferred', implication: '', evidence: evidence() }],
+      risks: [{ risk: '', basis: 'explicit|inferred', likelihood: 'high|medium|low|unknown', impact: '', mitigation: '', evidence: evidence() }],
+      blockers: [{ blocker: '', owner: null, consequence: '', evidence: evidence() }],
+      dependencies: [{ dependency: '', status: 'ready|at_risk|blocked|unknown', owner: null, evidence: evidence() }],
+      participantViews: [{ speaker: '', position: '', commitments: [], concerns: [], evidence: evidence() }],
+      metrics: [{ metric: '', value: '', context: '', evidence: evidence() }],
+      openQuestions: [{ question: '', owner: null, whyItMatters: '', evidence: evidence() }],
+      topics: [{ topic: '', status: 'resolved|open|deferred', summary: '', evidence: evidence() }],
+      nextMeeting: { recommended: false, objective: '', timing: null, participants: [], agenda: [], rationale: '' }
+    })
+  };
+}
 
 export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOptions = {}): string {
   const modes = normalizeAnalysisModes(options.modes);
@@ -156,88 +259,26 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
   };
 
   const selectedInstructions = modes.map((mode) => modeInstructions[mode]).join('\n\n');
+  const outputContract = JSON.stringify(buildAnalysisOutputContract(modes), null, 2);
   return `Create a Voxa specialist analysis in ${outputLanguage}.
 Selected modes: ${modes.join(', ')}.
 ${context ? `Optional user context: ${context}\nRemember: context guides relevance but is not transcript evidence.\n` : ''}
 ${selectedInstructions}
 
 EVIDENCE OBJECT
-${evidenceSchema}
+${JSON.stringify(evidenceExample)}
 
-OUTPUT CONTRACT
-Return exactly these seven top-level keys in this order. Use version 3.0. Set each unselected mode to null. Do not add shared speaker, executiveSignals or any other top-level section.
-{
-  "version": "3.0",
-  "analysisModes": ${JSON.stringify(modes)},
-  "summary": {
-    "title": "short factual title",
-    "intent": "explicit purpose or not determinable",
-    "overview": "concise factual account without unsupported specifics",
-    "language": "output language"
-  },
-  "evidenceQuality": {
-    "level": "high|medium|low",
-    "reasons": [],
-    "limitations": []
-  },
-  "interview": ${modes.includes('interview') ? `{
-    "participants": { "candidate": null, "interviewers": [], "uncertain": [] },
-    "scorecard": {
-      "overallScore": null,
-      "scoreConfidence": "high|medium|low",
-      "outcomeForecast": "likely_advance|uncertain|likely_not_advance",
-      "rationale": "",
-      "evidence": [${evidenceSchema}],
-      "caveat": ""
-    },
-    "strengths": [{ "insight": "", "whyItMatters": "", "evidence": [${evidenceSchema}] }],
-    "concerns": [{ "insight": "", "severity": "high|medium|low", "missingEvidence": "", "evidence": [${evidenceSchema}] }],
-    "competencies": [{ "name": "", "score": null, "assessment": "", "gap": "", "evidence": [${evidenceSchema}] }],
-    "questionReviews": [{
-      "question": "", "askedBy": null, "answeredBy": null, "answerSummary": "", "score": null,
-      "dimensions": { "relevance": null, "specificity": null, "structure": null, "evidence": null, "ownership": null, "impact": null },
-      "whatWorked": [], "improve": [], "betterAnswerOutline": "", "followUps": [], "evidence": [${evidenceSchema}]
-    }],
-    "candidateQuestions": [{ "question": "", "evidence": [${evidenceSchema}] }],
-    "preparationPlan": [{ "priority": 1, "focus": "", "basedOn": "", "actions": [], "successMetric": "" }],
-    "practiceQuestions": [{ "question": "", "why": "", "targetSignal": "" }]
-  }` : 'null'},
-  "languageClass": ${modes.includes('language') ? `{
-    "lessonBrief": { "objective": "", "learnerSpeakers": [], "teacherSpeakers": [], "evidence": [${evidenceSchema}] },
-    "learnerProfiles": [{
-      "speaker": "", "cefrEstimate": "A1|A2|B1|B2|C1|C2|unknown", "evidenceSufficiency": "high|medium|low",
-      "scores": { "grammar": null, "vocabulary": null, "fluency": null, "coherence": null, "interaction": null, "intelligibility": null },
-      "strengths": [{ "insight": "", "evidence": [${evidenceSchema}] }],
-      "priorities": [{ "insight": "", "pattern": "", "impact": "", "evidence": [${evidenceSchema}] }],
-      "teacherFeedback": ""
-    }],
-    "lessonProgress": {
-      "successfulUse": [{ "skill": "", "evidence": [${evidenceSchema}] }],
-      "recurringPatterns": [{ "pattern": "", "frequency": "single|repeated", "evidence": [${evidenceSchema}] }],
-      "selfCorrections": [{ "observation": "", "evidence": [${evidenceSchema}] }],
-      "missedOpportunities": [{ "opportunity": "", "coachPrompt": "", "evidence": [${evidenceSchema}] }]
-    },
-    "corrections": [{ "speaker": "", "category": "grammar|vocabulary|naturalness|coherence|register", "original": "exact transcript quote", "corrected": "", "explanation": "", "priority": "high|medium|low" }],
-    "teacherBrief": {
-      "whatToReinforce": [],
-      "nextLessonFocus": [{ "focus": "", "why": "", "activities": [], "successMetric": "", "evidence": [${evidenceSchema}] }],
-      "homework": [{ "task": "", "durationMinutes": null, "successMetric": "" }]
-    }
-  }` : 'null'},
-  "meeting": ${modes.includes('meeting') ? `{
-    "managerBrief": { "outcome": "", "whatChanged": [], "needsDecision": [], "needsEscalation": [] },
-    "topics": [{ "topic": "", "status": "resolved|open|deferred", "summary": "", "evidence": [${evidenceSchema}] }],
-    "participantSummaries": [{ "speaker": "", "statedPosition": "", "commitments": [], "evidence": [${evidenceSchema}] }],
-    "decisions": [{ "decision": "", "owner": null, "impact": "", "evidence": [${evidenceSchema}] }],
-    "proposals": [{ "proposal": "", "proposedBy": null, "status": "open|accepted|rejected|deferred", "evidence": [${evidenceSchema}] }],
-    "actionItems": [{ "task": "", "owner": null, "dueDate": null, "status": "open", "evidence": [${evidenceSchema}] }],
-    "risks": [{ "risk": "", "basis": "explicit|inferred", "impact": "", "mitigation": "", "evidence": [${evidenceSchema}] }],
-    "blockers": [{ "blocker": "", "owner": null, "evidence": [${evidenceSchema}] }],
-    "metrics": [{ "metric": "", "value": "", "context": "", "evidence": [${evidenceSchema}] }],
-    "openQuestions": [{ "question": "", "owner": null, "evidence": [${evidenceSchema}] }],
-    "nextMeeting": { "recommended": false, "objective": "", "timing": null, "participants": [], "agenda": [], "rationale": "" }
-  }` : 'null'}
-}
+STRUCTURE AND DEPTH RULES
+- Return exactly the seven top-level keys in the JSON contract, in the same order. Set every unselected mode to null.
+- Keep facts, evaluation and recommendations in their named sections. Do not repeat the same insight in multiple sections.
+- Populate every applicable section with specific detail. Empty arrays are correct when evidence is absent; generic filler is not.
+- Each item must answer what happened, why it matters and what should happen next when those fields exist.
+- Prefer 3-6 high-value items per major array and up to 8 substantive question reviews. Do not sacrifice evidence quality to fill a quota.
+- Recommendations belong only in coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
+- Use null for unknown scalar values. Never replace missing structured fields with prose blobs.
+
+EXACT OUTPUT CONTRACT
+${outputContract}
 
 TRANSCRIPT START
 ${transcriptText}
@@ -306,6 +347,22 @@ function sanitizeNode(value: any, transcriptText: string, stats: { removedEviden
   return value;
 }
 
+function conformToContract(value: any, template: any): any {
+  if (Array.isArray(template)) {
+    if (!Array.isArray(value)) return [];
+    if (!template.length) return value;
+    return value.map((item) => conformToContract(item, template[0]));
+  }
+  if (template && typeof template === 'object') {
+    const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return Object.fromEntries(Object.entries(template).map(([key, child]) => [key, conformToContract(source[key], child)]));
+  }
+  if (template === null) return value === undefined ? null : value;
+  if (typeof template === 'boolean') return typeof value === 'boolean' ? value : false;
+  if (typeof template === 'number') return Number.isFinite(Number(value)) ? Number(value) : null;
+  return value === null || value === undefined ? '' : value;
+}
+
 function keepGrounded(items: unknown, stats: { removedClaims: number }): any[] {
   if (!Array.isArray(items)) return [];
   return items.filter((item) => {
@@ -322,21 +379,48 @@ function evidenceContains(value: unknown, evidence: any[]): boolean {
   return evidence.some((item) => normalizedText(`${item?.speaker || ''} ${item?.quote || ''}`).includes(needle));
 }
 
+function hasEvidence(value: any): boolean {
+  return Array.isArray(value?.evidence) && value.evidence.length > 0;
+}
+
+function clearUngroundedFields(value: any, fields: string[], stats: { removedClaims: number }): void {
+  if (!value || typeof value !== 'object' || hasEvidence(value)) return;
+  const hadContent = fields.some((field) => Array.isArray(value[field]) ? value[field].length > 0 : Boolean(value[field]));
+  for (const field of fields) value[field] = Array.isArray(value[field]) ? [] : null;
+  if (hadContent) stats.removedClaims += 1;
+}
+
 function sanitizeInterview(value: any, stats: { removedClaims: number }): any {
   if (!value || typeof value !== 'object') return null;
-  for (const key of ['strengths', 'concerns', 'competencies', 'questionReviews', 'candidateQuestions']) {
+  clearUngroundedFields(value.context, ['interviewType', 'stage', 'targetRole', 'candidate', 'interviewers'], stats);
+  for (const key of ['strengths', 'concerns', 'contradictions', 'competencies', 'questionReviews']) {
     if (key in value) value[key] = keepGrounded(value[key], stats);
+  }
+  if (value.coaching && typeof value.coaching === 'object') {
+    for (const key of ['priorities', 'candidateQuestions', 'practiceQuestions']) {
+      value.coaching[key] = keepGrounded(value.coaching[key], stats);
+    }
+  }
+  if (!Array.isArray(value.executiveAssessment?.evidence) || !value.executiveAssessment.evidence.length) {
+    value.executiveAssessment.overallScore = null;
+    value.executiveAssessment.outcomeForecast = 'uncertain';
   }
   return value;
 }
 
 function sanitizeLanguage(value: any, transcriptText: string, stats: { removedClaims: number }): any {
   if (!value || typeof value !== 'object') return null;
+  clearUngroundedFields(value.lessonContext, ['objective', 'targetLanguage', 'learnerSpeakers', 'teacherSpeakers', 'topics'], stats);
   if (Array.isArray(value.learnerProfiles)) {
     value.learnerProfiles = value.learnerProfiles.map((profile: any) => ({
       ...profile,
       strengths: keepGrounded(profile?.strengths, stats),
-      priorities: keepGrounded(profile?.priorities, stats)
+      priorities: keepGrounded(profile?.priorities, stats),
+      skills: Object.fromEntries(Object.entries(profile?.skills || {}).map(([key, skill]: [string, any]) => {
+        const grounded = Array.isArray(skill?.evidence) && skill.evidence.length > 0;
+        if (!grounded && (skill?.score !== null || skill?.observation)) stats.removedClaims += 1;
+        return [key, grounded ? skill : { ...skill, score: null, observation: '', evidence: [] }];
+      }))
     }));
   }
   if (value.lessonProgress && typeof value.lessonProgress === 'object') {
@@ -344,22 +428,32 @@ function sanitizeLanguage(value: any, transcriptText: string, stats: { removedCl
       value.lessonProgress[key] = keepGrounded(value.lessonProgress[key], stats);
     }
   }
+  value.languagePatterns = keepGrounded(value.languagePatterns, stats);
   if (Array.isArray(value.corrections)) {
     value.corrections = value.corrections.filter((item: any) => {
-      const keep = quoteAppearsInTranscript(item?.original, transcriptText);
+      const keep = quoteAppearsInTranscript(item?.original, transcriptText)
+        && Array.isArray(item?.evidence)
+        && item.evidence.length > 0;
       if (!keep) stats.removedClaims += 1;
       return keep;
     });
+  }
+  if (value.teacherPlan && typeof value.teacherPlan === 'object') {
+    for (const key of ['reinforce', 'nextLessonFocus', 'homework']) {
+      value.teacherPlan[key] = keepGrounded(value.teacherPlan[key], stats);
+    }
   }
   return value;
 }
 
 function sanitizeMeeting(value: any, stats: { removedClaims: number; clearedOwners: number }): any {
   if (!value || typeof value !== 'object') return null;
-  for (const key of ['topics', 'participantSummaries', 'decisions', 'proposals', 'actionItems', 'risks', 'blockers', 'metrics', 'openQuestions']) {
+  clearUngroundedFields(value.meetingContext, ['purpose', 'participants', 'topics'], stats);
+  clearUngroundedFields(value.executiveBrief, ['outcome', 'whatChanged', 'needsDecision', 'needsEscalation'], stats);
+  for (const key of ['topics', 'participantViews', 'decisions', 'proposals', 'actionItems', 'risks', 'blockers', 'dependencies', 'metrics', 'openQuestions']) {
     if (key in value) value[key] = keepGrounded(value[key], stats);
   }
-  for (const key of ['decisions', 'actionItems', 'blockers', 'openQuestions']) {
+  for (const key of ['decisions', 'actionItems', 'blockers', 'dependencies', 'openQuestions']) {
     for (const item of value[key] || []) {
       if (item.owner && !evidenceContains(item.owner, item.evidence || [])) {
         item.owner = null;
@@ -379,10 +473,20 @@ function sanitizeMeeting(value: any, stats: { removedClaims: number; clearedOwne
 export function sanitizeAnalysisResult(raw: any, transcriptText: string, requestedModes: unknown): any {
   const modes = normalizeAnalysisModes(requestedModes);
   const stats = { removedEvidence: 0, invalidScores: 0, removedClaims: 0, clearedOwners: 0 };
-  const sanitized = sanitizeNode(raw && typeof raw === 'object' ? raw : {}, transcriptText, stats);
+  const cleaned = sanitizeNode(raw && typeof raw === 'object' ? raw : {}, transcriptText, stats);
+  const sanitized = conformToContract(cleaned, buildAnalysisOutputContract(modes));
   const interview = modes.includes('interview') ? sanitizeInterview(sanitized.interview, stats) : null;
   const languageClass = modes.includes('language') ? sanitizeLanguage(sanitized.languageClass, transcriptText, stats) : null;
   const meeting = modes.includes('meeting') ? sanitizeMeeting(sanitized.meeting, stats) : null;
+  clearUngroundedFields(sanitized.summary?.purpose, ['statement'], stats);
+  clearUngroundedFields(sanitized.summary?.executiveBrief, ['statement'], stats);
+  const summary = {
+    title: String(sanitized.summary?.title || ''),
+    purpose: sanitized.summary?.purpose || { statement: '', evidence: [] },
+    executiveBrief: sanitized.summary?.executiveBrief || { statement: '', evidence: [] },
+    keyPoints: keepGrounded(sanitized.summary?.keyPoints, stats),
+    language: String(sanitized.summary?.language || '')
+  };
   const evidenceQuality = sanitized.evidenceQuality && typeof sanitized.evidenceQuality === 'object'
     ? sanitized.evidenceQuality
     : { level: 'low', reasons: [], limitations: [] };
@@ -395,16 +499,9 @@ export function sanitizeAnalysisResult(raw: any, transcriptText: string, request
   if (stats.removedEvidence || stats.removedClaims || stats.invalidScores || stats.clearedOwners) evidenceQuality.level = 'low';
 
   return {
-    version: '3.0',
+    version: ANALYSIS_CONTRACT_VERSION,
     analysisModes: modes,
-    summary: sanitized.summary && typeof sanitized.summary === 'object'
-      ? {
-          title: String(sanitized.summary.title || ''),
-          intent: String(sanitized.summary.intent || ''),
-          overview: String(sanitized.summary.overview || ''),
-          language: String(sanitized.summary.language || '')
-        }
-      : { title: '', intent: '', overview: '', language: '' },
+    summary,
     evidenceQuality,
     interview,
     languageClass,

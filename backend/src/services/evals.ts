@@ -123,22 +123,30 @@ function claimItemsForMode(analysis: any, mode: AnalysisMode): any[] {
   if (mode === 'interview') return [
     ...(analysis?.interview?.strengths || []),
     ...(analysis?.interview?.concerns || []),
+    ...(analysis?.interview?.contradictions || []),
     ...(analysis?.interview?.competencies || []),
     ...(analysis?.interview?.questionReviews || []),
-    ...(analysis?.interview?.candidateQuestions || [])
+    ...(analysis?.interview?.coaching?.priorities || []),
+    ...(analysis?.interview?.coaching?.candidateQuestions || []),
+    ...(analysis?.interview?.coaching?.practiceQuestions || [])
   ];
   if (mode === 'language') return [
     ...(analysis?.languageClass?.learnerProfiles || []).flatMap((item: any) => [...(item.strengths || []), ...(item.priorities || [])]),
-    ...Object.values(analysis?.languageClass?.lessonProgress || {}).flatMap((items: any) => Array.isArray(items) ? items : [])
+    ...(analysis?.languageClass?.languagePatterns || []),
+    ...Object.values(analysis?.languageClass?.lessonProgress || {}).flatMap((items: any) => Array.isArray(items) ? items : []),
+    ...(analysis?.languageClass?.teacherPlan?.reinforce || []),
+    ...(analysis?.languageClass?.teacherPlan?.nextLessonFocus || []),
+    ...(analysis?.languageClass?.teacherPlan?.homework || [])
   ];
   return [
     ...(analysis?.meeting?.topics || []),
-    ...(analysis?.meeting?.participantSummaries || []),
+    ...(analysis?.meeting?.participantViews || []),
     ...(analysis?.meeting?.decisions || []),
     ...(analysis?.meeting?.proposals || []),
     ...(analysis?.meeting?.actionItems || []),
     ...(analysis?.meeting?.risks || []),
     ...(analysis?.meeting?.blockers || []),
+    ...(analysis?.meeting?.dependencies || []),
     ...(analysis?.meeting?.metrics || []),
     ...(analysis?.meeting?.openQuestions || [])
   ];
@@ -150,7 +158,7 @@ export function runDeterministicChecks(analysis: any, scenario: EvalScenario): D
   const expectedKeys = ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting'];
   const actualKeys = analysis && typeof analysis === 'object' ? Object.keys(analysis) : [];
   const schemaValid = expectedKeys.length === actualKeys.length && expectedKeys.every((key, index) => actualKeys[index] === key);
-  push('schema', 'Exact v3 analysis schema', schemaValid && analysis?.version === '3.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
+  push('schema', 'Exact v4 analysis schema', schemaValid && analysis?.version === '4.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
   const selectedExactly = Array.isArray(analysis?.analysisModes) && analysis.analysisModes.length === 1 && analysis.analysisModes[0] === scenario.mode;
   push('selected-mode', 'Selected mode is exact', selectedExactly, 'critical', `Expected only ${scenario.mode}.`);
   const modeObjects: Record<AnalysisMode, string> = { interview: 'interview', language: 'languageClass', meeting: 'meeting' };

@@ -37,3 +37,21 @@ test('report export escapes user and model-provided HTML', () => {
   assert.doesNotMatch(html, /<img src=x>/);
   assert.match(html, /&lt;img src=x&gt;/);
 });
+
+test('PDF report reads the structured v4 insight fields', () => {
+  const html = buildAnalysisReportHtml({
+    recording: { name: 'Structured review' },
+    analysis: {
+      version: '4.0', analysisModes: ['interview', 'language', 'meeting'], evidenceQuality: { level: 'high' },
+      summary: { title: 'Review', executiveBrief: { statement: 'A grounded executive brief.' } },
+      interview: { executiveAssessment: { overallScore: 7, outcomeForecast: 'uncertain', rationale: 'Needs more evidence.' }, strengths: [{ signal: 'Clear ownership', demonstratedBy: 'Named the contribution.', hiringRelevance: 'Execution signal.', evidence: [] }], concerns: [], competencies: [], questionReviews: [], coaching: { priorities: [], candidateQuestions: [], practiceQuestions: [] } },
+      languageClass: { lessonContext: { objective: 'Practice updates.', learnerSpeakers: ['Alex'] }, learnerProfiles: [{ speaker: 'Alex', cefr: { level: 'B2' }, skills: { grammar: { score: 7 } }, strengths: [], priorities: [] }], corrections: [], lessonProgress: {}, teacherPlan: {} },
+      meeting: { executiveBrief: { outcome: 'A staged plan was selected.', whatChanged: [], needsDecision: [], needsEscalation: [] }, decisions: [], actionItems: [], proposals: [], risks: [], blockers: [], metrics: [], openQuestions: [], topics: [] }
+    }
+  });
+  assert.match(html, /A grounded executive brief/);
+  assert.match(html, /Clear ownership/);
+  assert.match(html, /Practice updates/);
+  assert.match(html, /B2/);
+  assert.match(html, /A staged plan was selected/);
+});

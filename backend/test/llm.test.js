@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { buildAnalysisPrompt, normalizeAnalysisModes, sanitizeAnalysisResult } = require('../dist/services/llm');
+const { ANALYSIS_CONTRACT_VERSION, buildAnalysisOutputContract, buildAnalysisPrompt, normalizeAnalysisModes, sanitizeAnalysisResult } = require('../dist/services/llm');
 const { completeJsonWithOpenRouter } = require('../dist/services/llm');
 
 test('analysis modes are validated, deduplicated and default to language', () => {
@@ -24,10 +24,27 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /likely_advance\|uncertain\|likely_not_advance/);
   assert.match(prompt, /learnerProfiles/);
   assert.match(prompt, /questionReviews/);
-  assert.match(prompt, /managerBrief/);
+  assert.match(prompt, /executiveBrief/);
+  assert.match(prompt, /contradictions/);
+  assert.match(prompt, /languagePatterns/);
+  assert.match(prompt, /participantViews/);
+  assert.match(prompt, /STRUCTURE AND DEPTH RULES/);
   assert.match(prompt, /exact consecutive transcript quote/);
   assert.match(prompt, /Principal Engineer role/);
   assert.match(prompt, /\*\*Speaker 0\*\* Hello/);
+});
+
+test('v4 output contract separates factual registers from recommendations', () => {
+  const contract = buildAnalysisOutputContract(['interview', 'meeting']);
+  assert.equal(ANALYSIS_CONTRACT_VERSION, '4.0');
+  assert.deepEqual(Object.keys(contract), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
+  assert.equal(contract.languageClass, null);
+  assert.ok(contract.interview.context);
+  assert.ok(contract.interview.executiveAssessment);
+  assert.ok(contract.interview.coaching);
+  assert.ok(contract.meeting.executiveBrief);
+  assert.ok(contract.meeting.actionItems);
+  assert.ok(contract.meeting.nextMeeting);
 });
 
 test('single analysis prompt excludes unselected instructions', () => {
@@ -42,7 +59,12 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   const sanitized = sanitizeAnalysisResult({
     version: '2.0',
     analysisModes: ['meeting', 'language'],
-    summary: { title: 'Launch', overview: 'The team discussed launch work.' },
+    summary: {
+      title: 'Launch',
+      purpose: { statement: 'Review the launch checklist.', evidence: [{ speaker: 'Ana', quote: 'I will send the launch checklist on Friday' }] },
+      executiveBrief: { statement: 'Ana committed to send the checklist.', evidence: [{ speaker: 'Ana', quote: 'I will send the launch checklist on Friday' }] },
+      keyPoints: [{ statement: 'Checklist delivery is scheduled.', category: 'fact', evidence: [{ speaker: 'Ana', quote: 'send the launch checklist on Friday' }] }]
+    },
     evidenceQuality: { level: 'high', reasons: [], limitations: [] },
     languageClass: { overallScore: 12 },
     meeting: {
@@ -52,10 +74,12 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
       ],
       decisions: [{ decision: 'Ship today', score: 14, evidence: [{ speaker: 'Ana', quote: 'This was never said' }] }]
     },
-    extra: true
+    extra: true,
+    unexpectedModeKey: true
   }, transcript, ['meeting']);
 
   assert.deepEqual(Object.keys(sanitized), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
+  assert.equal(sanitized.version, '4.0');
   assert.deepEqual(sanitized.analysisModes, ['meeting']);
   assert.equal(sanitized.interview, null);
   assert.equal(sanitized.languageClass, null);
@@ -63,6 +87,7 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   assert.equal(sanitized.meeting.actionItems[0].owner, 'Ana');
   assert.equal(sanitized.meeting.actionItems[0].dueDate, 'Friday');
   assert.equal(sanitized.meeting.decisions.length, 0);
+  assert.deepEqual(Object.keys(sanitized.meeting), Object.keys(buildAnalysisOutputContract(['meeting']).meeting));
   assert.equal(sanitized.evidenceQuality.level, 'low');
   assert.ok(sanitized.evidenceQuality.limitations.length >= 1);
 });
