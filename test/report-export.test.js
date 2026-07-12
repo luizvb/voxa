@@ -23,7 +23,12 @@ test('PDF report HTML includes every selected analysis mode', () => {
   assert.match(html, /Language lesson analysis/);
   assert.match(html, /Meeting analysis/);
   assert.match(html, /Leadership interview/);
-  assert.match(html, /@page \{ size: A4/);
+  assert.match(html, /@page\s*\{[\s\S]*size:\s*A4/);
+  assert.match(html, /data-layout="editorial-minimal"/);
+  assert.match(html, /content: counter\(page\)/);
+  assert.doesNotMatch(html, /min-height:\s*250mm/);
+  assert.doesNotMatch(html, /border-radius:\s*999/);
+  assert.doesNotMatch(html, /background:\s*#f2f6f1/);
 });
 
 test('report export escapes user and model-provided HTML', () => {

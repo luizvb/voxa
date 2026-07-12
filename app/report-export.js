@@ -105,32 +105,44 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
   const recordingDate = recording?.createdAt ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(recording.createdAt)) : copy.noDate;
   const limitations = array(safe.evidenceQuality?.limitations);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${text(recording?.name, 'Voxa report')}</title><style>
-    @page { size: A4; margin: 15mm 14mm 17mm; }
+    @page {
+      size: A4;
+      margin: 18mm 17mm 19mm;
+      @bottom-left { content: "Voxa"; color: #7b7e79; font: 7px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+      @bottom-right { content: counter(page); color: #7b7e79; font: 7px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; color: #232622; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; font-size: 10px; line-height: 1.48; }
-    .cover { min-height: 250mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
-    .brand { font-size: 17px; font-weight: 800; letter-spacing: -.04em; } .brand i { color: #647d69; font-style: normal; }
-    .hero { max-width: 165mm; } .eyebrow, small { color: #737a72; font-size: 7.5px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
-    h1 { margin: 9px 0 12px; font-size: 34px; line-height: 1.04; letter-spacing: -.045em; } h2 { margin: 0 0 12px; border-bottom: 1px solid #dfe4dd; padding-bottom: 7px; font-size: 19px; letter-spacing: -.025em; } h3 { margin: 15px 0 7px; font-size: 12px; break-after: avoid-page; page-break-after: avoid; } h4 { margin: 0; font-size: 10px; }
-    p { margin: 5px 0; } .lead { color: #484e47; font-size: 14px; line-height: 1.58; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 1px solid #dfe4dd; padding-top: 13px; } .meta p { color: #555c54; }
-    .section { margin: 0 0 20px; } .mode-section { page-break-before: always; }
-    .columns, .quad, .triple { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; align-items: start; } .quad { grid-template-columns: repeat(2, 1fr); } .triple { grid-template-columns: repeat(3, 1fr); }
-    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    article, .quad > div { break-inside: avoid; margin: 0 0 8px; border: 1px solid #e0e4de; border-radius: 7px; padding: 9px; }
-    article strong { float: right; } ul { margin: 5px 0; padding-left: 16px; } li { margin: 3px 0; }
-    .score-row { display: grid; grid-template-columns: 86px 1fr; gap: 12px; align-items: stretch; margin-bottom: 13px; } .score { display: grid; place-content: center; border: 1px solid #d7e0d8; border-radius: 9px; padding: 10px; background: #f2f6f1; text-align: center; } .score span { font-size: 25px; font-weight: 800; line-height: 1; } .score small { margin-top: 6px; }
-    .forecast { border-left: 3px solid #718676; padding: 3px 0 3px 12px; } .forecast h3 { margin-top: 5px; text-transform: capitalize; }
+    body { margin: 0; color: #20211f; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 9.5px; line-height: 1.55; }
+    .cover { margin: 0 0 15mm; padding-bottom: 9mm; border-bottom: 1px solid #c9cbc7; }
+    .brand { font-size: 14px; font-weight: 700; letter-spacing: -.03em; } .brand i { color: #6d716b; font-style: normal; }
+    .hero { max-width: 165mm; margin: 16mm 0 10mm; } .eyebrow, small { color: #70736e; font-size: 7px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+    h1 { max-width: 155mm; margin: 5px 0 9px; font-size: 27px; font-weight: 600; line-height: 1.08; letter-spacing: -.035em; }
+    h2 { margin: 0 0 9mm; border-bottom: 1px solid #c9cbc7; padding-bottom: 3mm; font-size: 18px; font-weight: 600; letter-spacing: -.025em; }
+    h3 { margin: 8mm 0 3mm; font-size: 11px; font-weight: 700; break-after: avoid-page; page-break-after: avoid; }
+    h4 { margin: 0; font-size: 9.5px; font-weight: 700; }
+    p { margin: 3px 0; } .lead { max-width: 155mm; color: #4f524d; font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.55; }
+    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7mm; } .meta p { color: #393b38; }
+    .section { margin: 0 0 12mm; } .mode-section ~ .mode-section { page-break-before: always; }
+    .columns, .quad, .triple, .cards { display: block; }
+    .columns > div, .quad > div, .triple > div { margin: 0 0 7mm; }
+    article { break-inside: avoid; margin: 0; padding: 4mm 0; border-bottom: 1px solid #e3e4e1; }
+    article:first-child { padding-top: 0; }
+    article strong { float: right; } ul { margin: 3px 0; padding-left: 15px; } li { margin: 2px 0; }
+    .score-row { display: grid; grid-template-columns: 29mm 1fr; gap: 8mm; align-items: start; margin-bottom: 9mm; }
+    .score { padding-top: 1mm; border-top: 2px solid #262824; text-align: left; } .score span { display: block; margin-bottom: 3px; font-size: 28px; font-weight: 600; line-height: 1; } .score small { display: block; }
+    .forecast { padding-top: 1mm; border-top: 1px solid #c9cbc7; } .forecast h3 { margin: 3px 0; text-transform: capitalize; }
     .question header, .learner > header, .corrections header { display: flex; justify-content: space-between; gap: 10px; } .question header strong { float: none; }
-    .callout, .manager, .lesson-brief { border-color: #d2ddd4; background: #f2f6f1; } .note, .muted { color: #767c74; } .tag { display: inline-block; border-radius: 999px; padding: 2px 5px; background: #ecefe9; color: #60675f; font-size: 7.5px; text-transform: uppercase; }
-    .evidence { clear: both; margin-top: 7px; border-top: 1px solid #e0e4de; padding-top: 6px; } .evidence blockquote { display: grid; grid-template-columns: auto 1fr; gap: 5px; margin: 4px 0 0; border-left: 2px solid #b7c6b9; padding: 4px 6px; background: #f6f8f5; color: #5b635a; font-size: 8.5px; } .evidence blockquote b { float: none; }
-    .lesson-brief { display: grid; grid-template-columns: 1.4fr .6fr; gap: 10px; border: 1px solid #d2ddd4; border-radius: 8px; padding: 11px; } .lesson-brief .evidence { grid-column: 1 / -1; }
-    .learner { margin-top: 10px; padding: 11px; } .level { text-align: center; } .level strong { float: none; display: block; font-size: 22px; }
-    .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; overflow: hidden; margin: 9px 0; border: 1px solid #e0e4de; border-radius: 6px; background: #e0e4de; } .metrics div { padding: 6px; background: white; } .metrics b { display: block; margin-top: 3px; }
-    .correction { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 7px; } .correction strong { float: none; color: #45604b; }
-    .manager { border: 1px solid #d2ddd4; border-radius: 9px; padding: 12px; } .manager > h3 { font-size: 14px; }
-    footer { color: #838981; font-size: 8px; } footer b { color: #444a43; }
-  </style></head><body>
+    .callout { margin-top: 4mm; padding-left: 4mm; border-left: 2px solid #70736e; border-bottom: 0; }
+    .manager, .lesson-brief { margin-bottom: 8mm; padding: 0 0 6mm; border-bottom: 1px solid #c9cbc7; }
+    .note, .muted { color: #747772; } .tag { display: inline-block; padding: 0; color: #686b66; font-size: 7px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .evidence { clear: both; margin-top: 4mm; } .evidence blockquote { display: grid; grid-template-columns: auto 1fr; gap: 6px; margin: 2mm 0 0; border-left: 1px solid #aeb1ac; padding: 1mm 0 1mm 3mm; color: #626560; font-family: Georgia, "Times New Roman", serif; font-size: 8.5px; } .evidence blockquote b { float: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.5px; }
+    .lesson-brief { display: grid; grid-template-columns: 1.4fr .6fr; gap: 8mm; } .lesson-brief .evidence { grid-column: 1 / -1; }
+    .learner { margin-top: 5mm; } .level { min-width: 20mm; text-align: right; } .level strong { float: none; display: block; font-size: 18px; font-weight: 600; }
+    .metrics { display: grid; grid-template-columns: repeat(6, 1fr); margin: 5mm 0 2mm; border-top: 1px solid #c9cbc7; border-bottom: 1px solid #c9cbc7; } .metrics div { padding: 3mm 2mm; border-right: 1px solid #e3e4e1; } .metrics div:last-child { border-right: 0; } .metrics b { display: block; margin-top: 2px; font-size: 11px; }
+    .correction { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 3mm; } .correction strong { float: none; color: #30332f; }
+    .manager > h3 { max-width: 155mm; margin-top: 3px; font-family: Georgia, "Times New Roman", serif; font-size: 13px; font-weight: 400; line-height: 1.5; }
+    footer { margin-top: 7mm; color: #7b7e79; font-size: 7.5px; } footer b { color: #444743; }
+  </style></head><body data-layout="editorial-minimal">
     <section class="cover"><div class="brand">Voxa<i>.</i></div><div class="hero"><span class="eyebrow">${copy.report}</span><h1>${text(recording?.name, summary.title || 'Conversation report')}</h1><p class="lead">${text(summary.overview)}</p></div><div><div class="meta"><div><small>${copy.recorded}</small><p>${escapeHtml(recordingDate)}</p></div><div><small>${copy.generated}</small><p>${escapeHtml(generatedAt)}</p></div><div><small>${copy.modes}</small><p>${text(array(safe.analysisModes).join(', '))}</p></div><div><small>${copy.quality}</small><p>${text(safe.evidenceQuality?.level)}</p></div></div>${limitations.length ? `<h3>${copy.limitations}</h3>${list(limitations)}` : ''}<footer><b>Voxa:</b> ${copy.verify}</footer></div></section>
     ${buildInterview(safe.interview, copy)}
     ${buildLanguage(safe.languageClass, safe.speakers, copy)}
