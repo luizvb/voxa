@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, X } from 'lucide-react';
+import { FilePlus2, Plus, X } from 'lucide-react';
 import ComponentsShowcase from './components/ComponentsShowcase';
 import Dashboard from './components/Dashboard';
 import ExtensionAuth from './components/ExtensionAuth';
@@ -34,6 +34,7 @@ export default function App() {
   const [libraryError, setLibraryError] = useState('');
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [autoProcessRecordingId, setAutoProcessRecordingId] = useState<string | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   const isElectronApp = platform.capabilities.kind === 'electron';
   const isUiPreview = import.meta.env.DEV && window.location.hash === '#/ui';
@@ -127,12 +128,16 @@ export default function App() {
   };
 
   const handleEscape = useCallback(() => {
+    if (isImportDialogOpen) {
+      setIsImportDialogOpen(false);
+      return;
+    }
     if (showLoginModal) {
       setShowLoginModal(false);
       return;
     }
     if (selectedRecordingId) setSelectedRecordingId(null);
-  }, [selectedRecordingId, showLoginModal]);
+  }, [isImportDialogOpen, selectedRecordingId, showLoginModal]);
 
   useKeyboardActions({ enabled: isElectronApp && !isWidget, onEscape: handleEscape });
 
@@ -217,17 +222,30 @@ export default function App() {
             <h1>{pageTitle}</h1>
           </div>
           {activeView === 'library' && (
-            <button
-              type="button"
-              className="button button-primary toolbar-action"
-              onClick={() => {
-                setSelectedRecordingId(null);
-                setActiveView('workspace');
-              }}
-            >
-              <Plus />
-              {t('navigation', 'newRecording')}
-            </button>
+            <div className="toolbar-actions">
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => {
+                  setSelectedRecordingId(null);
+                  setIsImportDialogOpen(true);
+                }}
+              >
+                <FilePlus2 />
+                {t('history', 'importTranscript')}
+              </button>
+              <button
+                type="button"
+                className="button button-primary toolbar-action"
+                onClick={() => {
+                  setSelectedRecordingId(null);
+                  setActiveView('workspace');
+                }}
+              >
+                <Plus />
+                {t('navigation', 'newRecording')}
+              </button>
+            </div>
           )}
         </header>
 
@@ -272,6 +290,8 @@ export default function App() {
                   libraryError={libraryError}
                   onRetry={loadRecordings}
                   onStartRecording={() => setActiveView('workspace')}
+                  isImportDialogOpen={isImportDialogOpen}
+                  onImportDialogOpenChange={setIsImportDialogOpen}
                   autoProcess={autoProcessRecordingId === selectedRecordingId}
                 />
               </motion.div>

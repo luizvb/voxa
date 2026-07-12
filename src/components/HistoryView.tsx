@@ -34,6 +34,8 @@ interface HistoryViewProps {
   libraryError: string;
   onRetry: () => void;
   onStartRecording: () => void;
+  isImportDialogOpen: boolean;
+  onImportDialogOpenChange: (open: boolean) => void;
   autoProcess?: boolean;
 }
 
@@ -114,6 +116,8 @@ export default function HistoryView({
   libraryError,
   onRetry,
   onStartRecording,
+  isImportDialogOpen,
+  onImportDialogOpenChange,
   autoProcess,
 }: HistoryViewProps) {
   const { t, language } = useLanguage();
@@ -133,7 +137,6 @@ export default function HistoryView({
   const [autoProcessStep, setAutoProcessStep] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showImportDialog, setShowImportDialog] = useState(false);
   const [importTitle, setImportTitle] = useState('');
   const [importTranscript, setImportTranscript] = useState('');
   const [importStatus, setImportStatus] = useState('');
@@ -282,7 +285,7 @@ export default function HistoryView({
     setImportStatus('');
     try {
       const conversation = await platform.importTranscript({ name, transcript });
-      setShowImportDialog(false);
+      onImportDialogOpenChange(false);
       setImportTitle('');
       setImportTranscript('');
       await loadRecordings();
@@ -344,13 +347,10 @@ export default function HistoryView({
             <h2>{t('library', 'title')}</h2>
             <p>{t('library', 'subtitle')}</p>
           </div>
-          <div className="library-actions">
-            <label className="search-field">
-              <Search />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('history', 'search')} />
-            </label>
-            <button type="button" className="button button-secondary" onClick={() => setShowImportDialog(true)}><FilePlus2 />{t('history', 'importTranscript')}</button>
-          </div>
+          <label className="search-field">
+            <Search />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('history', 'search')} />
+          </label>
         </section>
 
         {libraryStatus === 'loading' && recordings.length === 0 ? (
@@ -369,7 +369,7 @@ export default function HistoryView({
             <span className="empty-icon"><FileAudio /></span>
             <strong>{t('library', 'emptyTitle')}</strong>
             <p>{t('library', 'emptyDescription')}</p>
-            <div className="empty-actions"><button type="button" className="button button-primary" onClick={onStartRecording}>{t('navigation', 'newRecording')}</button><button type="button" className="button button-secondary" onClick={() => setShowImportDialog(true)}>{t('history', 'importTranscript')}</button></div>
+            <div className="empty-actions"><button type="button" className="button button-primary" onClick={onStartRecording}>{t('navigation', 'newRecording')}</button><button type="button" className="button button-secondary" onClick={() => onImportDialogOpenChange(true)}>{t('history', 'importTranscript')}</button></div>
           </div>
         ) : filteredRecordings.length === 0 ? (
           <div className="empty-state library-empty">
@@ -399,17 +399,17 @@ export default function HistoryView({
           </div>
         )}
         <AnimatePresence>
-          {showImportDialog && (
+          {isImportDialogOpen && (
             <motion.div className="modal-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <motion.section className="import-dialog" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 6, opacity: 0 }} role="dialog" aria-modal="true" aria-labelledby="import-transcript-title">
-                <button type="button" className="icon-button confirm-close" onClick={() => setShowImportDialog(false)} aria-label={t('common', 'close')}><X /></button>
+                <button type="button" className="icon-button confirm-close" onClick={() => onImportDialogOpenChange(false)} aria-label={t('common', 'close')}><X /></button>
                 <span className="import-icon"><FilePlus2 /></span>
                 <h3 id="import-transcript-title">{t('history', 'importTitle')}</h3>
                 <p>{t('history', 'importDescription')}</p>
                 <label><span>{t('history', 'conversationTitle')}</span><input value={importTitle} maxLength={255} onChange={(event) => setImportTitle(event.target.value)} placeholder={t('history', 'conversationTitlePlaceholder')} autoFocus /></label>
                 <label><span>{t('history', 'transcript')}</span><textarea value={importTranscript} maxLength={100000} onChange={(event) => setImportTranscript(event.target.value)} placeholder={t('history', 'transcriptPlaceholder')} rows={12} /></label>
                 {importStatus && <p className="form-error" role="alert">{importStatus}</p>}
-                <div className="confirm-actions"><button type="button" className="button button-secondary" onClick={() => setShowImportDialog(false)}>{t('common', 'cancel')}</button><button type="button" className="button button-primary" onClick={handleImportTranscript} disabled={isImporting || !importTitle.trim() || !importTranscript.trim()}>{isImporting && <Loader2 className="spin" />}{t('history', 'importAction')}</button></div>
+                <div className="confirm-actions"><button type="button" className="button button-secondary" onClick={() => onImportDialogOpenChange(false)}>{t('common', 'cancel')}</button><button type="button" className="button button-primary" onClick={handleImportTranscript} disabled={isImporting || !importTitle.trim() || !importTranscript.trim()}>{isImporting && <Loader2 className="spin" />}{t('history', 'importAction')}</button></div>
               </motion.section>
             </motion.div>
           )}
