@@ -21,8 +21,9 @@ import {
   X,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
-import { platform, type Recording } from '../platform';
+import { platform, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 import AIAnalysis from './AIAnalysis';
 
 interface HistoryViewProps {
@@ -145,6 +146,7 @@ export default function HistoryView({
   const [importTranscript, setImportTranscript] = useState('');
   const [importStatus, setImportStatus] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>(() => getSavedTranscriptionLanguage(language));
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoProcessAttemptedRef = useRef<string | null>(null);
 
@@ -263,7 +265,7 @@ export default function HistoryView({
       setAutoProcessStep(t('history', 'transcribingStep'));
 
       try {
-        const result = await platform.transcribe({ recordingId: selected.id, maxQuality: false });
+        const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
         setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
         await loadRecordings();
 
@@ -283,7 +285,7 @@ export default function HistoryView({
     }
 
     runAutoProcess();
-  }, [analysisModes, autoProcess, loadRecordings, locale, selected, t]);
+  }, [analysisModes, autoProcess, loadRecordings, locale, selected, t, transcriptionLanguage]);
 
   const togglePlay = async () => {
     const audio = audioRef.current;
@@ -305,7 +307,7 @@ export default function HistoryView({
     if (!selected) return;
     setTranscriptData({ isTranscribing: true, status: t('history', 'transcribingStep') });
     try {
-      const result = await platform.transcribe({ recordingId: selected.id, maxQuality: false });
+      const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
       setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
       await loadRecordings();
     } catch (error: any) {
@@ -334,6 +336,11 @@ export default function HistoryView({
     setSelectedSpeakers((current) => current.includes(speaker)
       ? current.filter((item) => item !== speaker)
       : [...current, speaker]);
+  };
+
+  const handleTranscriptionLanguageChange = (nextLanguage: TranscriptionLanguage) => {
+    setTranscriptionLanguage(nextLanguage);
+    saveTranscriptionLanguage(nextLanguage);
   };
 
   const handleImportTranscript = async () => {
@@ -543,10 +550,24 @@ export default function HistoryView({
           </div>
 
           {activeTab === 'transcript' ? (selected.hasAudio !== false ? (
-            <button type="button" className="button button-secondary" onClick={handleTranscribe} disabled={transcriptData.isTranscribing} data-keyboard-primary="true">
-              {transcriptData.isTranscribing ? <Loader2 className="spin" /> : <FileText />}
-              {transcriptData.markdown ? t('history', 'retranscribe') : t('history', 'transcribeAudio')}
-            </button>
+            <div className="transcript-toolbar-actions">
+              <label className="transcription-language-control">
+                <span>{t('common', 'transcriptionLanguage')}</span>
+                <select
+                  value={transcriptionLanguage}
+                  onChange={(event) => handleTranscriptionLanguageChange(event.target.value as TranscriptionLanguage)}
+                  disabled={transcriptData.isTranscribing}
+                >
+                  {TRANSCRIPTION_LANGUAGES.map((item) => (
+                    <option value={item} key={item}>{t('common', item === 'pt-BR' ? 'portuguese' : item === 'es' ? 'spanish' : 'english')}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="button button-secondary" onClick={handleTranscribe} disabled={transcriptData.isTranscribing} data-keyboard-primary="true">
+                {transcriptData.isTranscribing ? <Loader2 className="spin" /> : <FileText />}
+                {transcriptData.markdown ? t('history', 'retranscribe') : t('history', 'transcribeAudio')}
+              </button>
+            </div>
           ) : null) : transcriptData.markdown ? (
             <div className="analysis-toolbar-actions">
               {aiData.analysis && <button type="button" className="button button-secondary" onClick={handleExportPdf} disabled={isExportingPdf}>

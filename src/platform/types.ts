@@ -19,6 +19,14 @@ export interface TranscriptResult {
   speakers?: string[];
 }
 
+export type TranscriptionLanguage = 'en-US' | 'pt-BR' | 'es';
+
+export interface TranscriptionInput {
+  recordingId: string;
+  language: TranscriptionLanguage;
+  maxQuality?: boolean;
+}
+
 export interface PlatformCapabilities {
   kind: 'electron' | 'web';
   systemAudio: boolean;
@@ -52,7 +60,7 @@ export interface VoxaPlatform {
   saveRecording(input: SaveRecordingInput): Promise<Recording>;
   importTranscript(input: { name: string; transcript: string }): Promise<Recording>;
   deleteRecording(id: string): Promise<void>;
-  transcribe(input: { recordingId: string; maxQuality?: boolean }): Promise<{ markdown: string }>;
+  transcribe(input: TranscriptionInput): Promise<{ markdown: string }>;
   getTranscript(recordingId: string): Promise<TranscriptResult | null>;
   analyze(input: AnalysisInput): Promise<any>;
   getAnalysis(recordingId: string): Promise<any | null>;

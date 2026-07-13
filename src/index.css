@@ -234,6 +234,12 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .recording-title-field input { width: 100%; border: 0; padding: 0; background: transparent; color: var(--text); font-size: clamp(26px, 4vw, 42px); font-weight: 680; line-height: 1.08; letter-spacing: -0.045em; }
 .recording-title-field input::placeholder { color: #b7b7b0; }
 .recording-title-field input:focus-visible { outline-offset: 6px; }
+.transcription-language-field { display: grid; width: min(100%, 320px); gap: 6px; margin-top: 18px; }
+.transcription-language-field > span, .transcription-language-control > span { color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.transcription-language-field select, .transcription-language-control select { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; padding: 0 34px 0 11px; background: #ffffff; color: var(--text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.transcription-language-field select:focus-visible, .transcription-language-control select:focus-visible { outline: 2px solid #111111; outline-offset: 2px; }
+.transcription-language-field select:disabled, .transcription-language-control select:disabled { cursor: not-allowed; opacity: .58; }
+.transcription-language-field small { color: var(--text-tertiary); font-size: 10px; line-height: 1.45; }
 .recorder-description { max-width: 60ch; margin: 14px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
 .inline-notice { display: inline-flex; margin: 12px 0 0; border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--text-secondary); font-size: 12px; }
 .recorder-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 24px; }
@@ -387,6 +393,9 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .analysis-feedback { background: var(--success-soft) !important; border-color: #d8e7dc !important; }
 .analysis-empty { display: grid; min-height: 260px; place-items: center; color: var(--text-tertiary); font-size: 13px; }
 .analysis-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.transcript-toolbar-actions { display: flex; align-items: flex-end; gap: 8px; }
+.transcription-language-control { display: grid; gap: 4px; }
+.transcription-language-control select { min-width: 150px; }
 .analysis-config-panel { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding: 14px 16px; background: #fafaf8; }
 .config-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .config-heading-row button { border: 0; padding: 2px; background: transparent; color: var(--text-secondary); font-size: 10px; font-weight: 700; cursor: pointer; }
@@ -979,6 +988,8 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
   .detail-tabs { width: 100%; }
   .detail-tabs button { flex: 1; justify-content: center; }
   .detail-tabs-row > .button { width: 100%; }
+  .transcript-toolbar-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .transcription-language-control select, .transcript-toolbar-actions .button { width: 100%; }
   .analysis-toolbar-actions { width: 100%; }
   .analysis-toolbar-actions .button { flex: 1; }
   .transcript-block { grid-template-columns: 1fr; gap: 8px; }

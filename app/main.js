@@ -351,7 +351,7 @@ ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${input.authToken || ''}`
     },
-    body: JSON.stringify({ maxQuality: Boolean(input.maxQuality) })
+    body: JSON.stringify({ language: input.language, maxQuality: Boolean(input.maxQuality) })
   });
 
   if (!response.ok) {
@@ -359,7 +359,29 @@ ipcMain.handle('transcriptions:deepgram', async (_event, input) => {
     throw new Error(`Transcription failed: ${errorBody}`);
   }
   
-  return response.json();
+  const deadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < deadline) {
+    const statusResponse = await fetchApi(`/api/recordings/${input.recordingId}/status`, {
+      headers: { Authorization: `Bearer ${input.authToken || ''}` }
+    });
+    if (!statusResponse.ok) throw new Error(`Could not read transcription status (${statusResponse.status}).`);
+
+    const status = await statusResponse.json();
+    if (status.state === 'failed') throw new Error(status.error || 'Transcription failed.');
+    if (status.state === 'ready') {
+      const transcriptResponse = await fetchApi(`/api/recordings/${input.recordingId}/transcript`, {
+        headers: { Authorization: `Bearer ${input.authToken || ''}` }
+      });
+      if (!transcriptResponse.ok) throw new Error(`Could not load transcript (${transcriptResponse.status}).`);
+      const transcript = await transcriptResponse.json();
+      if (!transcript.markdown) throw new Error('Transcription finished without readable text.');
+      return transcript;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+
+  throw new Error('Transcription is taking longer than expected. Try again in a moment.');
 });
 
 ipcMain.handle('transcriptions:get', async (_event, input) => {

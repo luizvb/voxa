@@ -3,6 +3,7 @@ export const locales = {
     common: {
       loading: 'Loading Voxa…', close: 'Close', cancel: 'Cancel', delete: 'Delete', retry: 'Try again',
       serviceUnavailable: 'The local service is unavailable.', guest: 'Guest',
+      transcriptionLanguage: 'Transcription language', english: 'English', portuguese: 'Portuguese', spanish: 'Spanish',
     },
     navigation: {
       workspace: 'Workspace', library: 'Library', conversation: 'Conversation', newRecording: 'New recording',
@@ -36,6 +37,7 @@ export const locales = {
       shortcut: 'Shortcut', signalMonitor: 'Audio signal', input: 'Input', micAndSystem: 'Mic + system', saveMode: 'Save mode', localFirst: 'Local first',
       analyzeAs: 'Analyze as', captureSource: 'Recording source', recordComputerAudio: 'Record computer audio', recordComputerAudioDescription: 'Starts immediately with the computer microphone.',
       shareTabOrScreen: 'Share a tab or screen', shareTabOrScreenDescription: 'Captures shared audio and adds your microphone when allowed.', inputMicrophone: 'Computer microphone', inputShared: 'Mic + shared audio',
+      transcriptionLanguageDescription: 'Voxa uses this language for Nova-3 transcription and speaker diarization.',
     },
     onboarding: {
       eyebrow: 'Conversation intelligence', welcome: 'Turn every conversation into useful knowledge.',
@@ -98,6 +100,7 @@ export const locales = {
     common: {
       loading: 'Carregando o Voxa…', close: 'Fechar', cancel: 'Cancelar', delete: 'Excluir', retry: 'Tentar novamente',
       serviceUnavailable: 'O serviço local está indisponível.', guest: 'Visitante',
+      transcriptionLanguage: 'Idioma da transcrição', english: 'Inglês', portuguese: 'Português', spanish: 'Espanhol',
     },
     navigation: {
       workspace: 'Workspace', library: 'Biblioteca', conversation: 'Conversa', newRecording: 'Nova gravação',
@@ -131,6 +134,7 @@ export const locales = {
       shortcut: 'Atalho', signalMonitor: 'Sinal de áudio', input: 'Entrada', micAndSystem: 'Mic + sistema', saveMode: 'Modo de salvamento', localFirst: 'Local primeiro',
       analyzeAs: 'Analisar como', captureSource: 'Fonte da gravação', recordComputerAudio: 'Gravar áudio do computador', recordComputerAudioDescription: 'Inicia direto usando o microfone do computador.',
       shareTabOrScreen: 'Compartilhar aba ou tela', shareTabOrScreenDescription: 'Captura o áudio compartilhado e adiciona seu microfone quando permitido.', inputMicrophone: 'Microfone do computador', inputShared: 'Mic + áudio compartilhado',
+      transcriptionLanguageDescription: 'O Voxa usa este idioma na transcrição Nova-3 e na identificação dos participantes.',
     },
     onboarding: {
       eyebrow: 'Inteligência de conversação', welcome: 'Transforme cada conversa em conhecimento útil.',
@@ -193,6 +197,7 @@ export const locales = {
     common: {
       loading: 'Cargando Voxa…', close: 'Cerrar', cancel: 'Cancelar', delete: 'Eliminar', retry: 'Intentar de nuevo',
       serviceUnavailable: 'El servicio local no está disponible.', guest: 'Invitado',
+      transcriptionLanguage: 'Idioma de transcripción', english: 'Inglés', portuguese: 'Portugués', spanish: 'Español',
     },
     navigation: {
       workspace: 'Workspace', library: 'Biblioteca', conversation: 'Conversación', newRecording: 'Nueva grabación',
@@ -226,6 +231,7 @@ export const locales = {
       shortcut: 'Atajo', signalMonitor: 'Señal de audio', input: 'Entrada', micAndSystem: 'Mic + sistema', saveMode: 'Modo de guardado', localFirst: 'Local primero',
       analyzeAs: 'Analizar como', captureSource: 'Fuente de grabación', recordComputerAudio: 'Grabar audio del ordenador', recordComputerAudioDescription: 'Empieza directamente con el micrófono del ordenador.',
       shareTabOrScreen: 'Compartir pestaña o pantalla', shareTabOrScreenDescription: 'Captura el audio compartido y añade tu micrófono cuando está permitido.', inputMicrophone: 'Micrófono del ordenador', inputShared: 'Mic + audio compartido',
+      transcriptionLanguageDescription: 'Voxa usa este idioma para la transcripción Nova-3 y la identificación de participantes.',
     },
     onboarding: {
       eyebrow: 'Inteligencia conversacional', welcome: 'Convierte cada conversación en conocimiento útil.',

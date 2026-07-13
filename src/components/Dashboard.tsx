@@ -18,9 +18,10 @@ import {
   Square,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
-import { platform, type Recording } from '../platform';
+import { platform, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useRecorder } from '../hooks/useRecorder';
+import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 
 interface DashboardProps {
   recordings: Recording[];
@@ -53,7 +54,7 @@ export default function Dashboard({
   onSelectRecording,
   onRecordingComplete,
 }: DashboardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const {
     isRecording,
     isPaused,
@@ -75,6 +76,7 @@ export default function Dashboard({
   const [isShortcutPanelOpen, setIsShortcutPanelOpen] = useState(false);
   const [shortcutStatus, setShortcutStatus] = useState('');
   const [micStatus, setMicStatus] = useState('');
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>(() => getSavedTranscriptionLanguage(language));
 
   const currentShortcut = shortcutLabels[shortcutSettings.record] || shortcutSettings.record;
   const recentRecordings = useMemo(
@@ -146,6 +148,11 @@ export default function Dashboard({
     } catch {
       setMicStatus(t('recorder', 'microphoneFailed'));
     }
+  };
+
+  const handleTranscriptionLanguageChange = (nextLanguage: TranscriptionLanguage) => {
+    setTranscriptionLanguage(nextLanguage);
+    saveTranscriptionLanguage(nextLanguage);
   };
 
   const handleStop = async () => {
@@ -226,6 +233,20 @@ export default function Dashboard({
               onChange={(event) => setSessionName(event.target.value)}
               placeholder={t('recorder', 'titlePlaceholder')}
             />
+          </label>
+
+          <label className="transcription-language-field">
+            <span>{t('common', 'transcriptionLanguage')}</span>
+            <select
+              value={transcriptionLanguage}
+              onChange={(event) => handleTranscriptionLanguageChange(event.target.value as TranscriptionLanguage)}
+              disabled={isRecording}
+            >
+              {TRANSCRIPTION_LANGUAGES.map((item) => (
+                <option value={item} key={item}>{t('common', item === 'pt-BR' ? 'portuguese' : item === 'es' ? 'spanish' : 'english')}</option>
+              ))}
+            </select>
+            <small>{t('recorder', 'transcriptionLanguageDescription')}</small>
           </label>
 
           <p className="recorder-description">

@@ -5,7 +5,7 @@ import { waitUntil } from '@vercel/functions';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import db from '../config/db';
-import { transcribeWithDeepgram } from '../services/transcription';
+import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
 import { analyzeTranscriptWithOpenRouter, extractSpeakerLabels, normalizeAnalysisModes, normalizeSelectedSpeakers } from '../services/llm';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
@@ -326,11 +326,18 @@ export const transcribeRecording = async (req: Request, res: Response): Promise<
   try {
     const userId = req.user!.id;
     const { id } = req.params;
+    let language: TranscriptionLanguage;
+    try {
+      language = normalizeTranscriptionLanguage(req.body?.language);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Unsupported transcription language.' });
+      return;
+    }
     
     const { rows } = await db.query(`
       UPDATE recordings
       SET state = 'transcribing', processing_error = NULL
-      WHERE id = $1 AND user_id = $2 AND state IN ('uploaded', 'failed')
+      WHERE id = $1 AND user_id = $2 AND state IN ('uploaded', 'failed', 'ready')
       RETURNING *
     `, [id, userId]);
     if (rows.length === 0) {
@@ -340,7 +347,7 @@ export const transcribeRecording = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const job = runTranscription(rows[0], userId, Boolean(req.body?.maxQuality));
+    const job = runTranscription(rows[0], userId, Boolean(req.body?.maxQuality), language);
     if (process.env.VERCEL) waitUntil(job);
     else void job;
     res.status(202).json({ recordingId: id, state: 'transcribing' });
@@ -350,7 +357,7 @@ export const transcribeRecording = async (req: Request, res: Response): Promise<
   }
 };
 
-async function runTranscription(recording: any, userId: string, maxQuality: boolean): Promise<void> {
+async function runTranscription(recording: any, userId: string, maxQuality: boolean, language: TranscriptionLanguage): Promise<void> {
   try {
     let audio: Buffer | undefined;
     if (/^https:\/\//i.test(recording.local_file_path)) {
@@ -363,6 +370,7 @@ async function runTranscription(recording: any, userId: string, maxQuality: bool
       filePath: audio ? undefined : recording.local_file_path,
       audio,
       mimeType: recording.mime_type || 'audio/webm',
+      language,
       maxQuality
     });
     await db.query('BEGIN');

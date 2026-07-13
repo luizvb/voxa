@@ -2,11 +2,29 @@ import fs from "fs/promises";
 
 const DEEPGRAM_ENDPOINT = "https://api.deepgram.com/v1/listen";
 
+export type TranscriptionLanguage = "en-US" | "pt-BR" | "es" | "multi";
+
+const TRANSCRIPTION_LANGUAGES = new Set<TranscriptionLanguage>([
+  "en-US",
+  "pt-BR",
+  "es",
+  "multi",
+]);
+
+export function normalizeTranscriptionLanguage(value: unknown): TranscriptionLanguage {
+  if (value === undefined || value === null || value === "") return "multi";
+  if (typeof value === "string" && TRANSCRIPTION_LANGUAGES.has(value as TranscriptionLanguage)) {
+    return value as TranscriptionLanguage;
+  }
+  throw new RangeError("Unsupported transcription language. Use en-US, pt-BR, or es.");
+}
+
 export interface TranscriptionInput {
   apiKey: string;
   filePath?: string;
   audio?: Buffer;
   mimeType: string;
+  language?: TranscriptionLanguage;
   maxQuality?: boolean;
 }
 
@@ -24,18 +42,18 @@ export interface TranscriptionResult {
 }
 
 export function createDeepgramUrl(
-  options: { maxQuality?: boolean } = {},
+  options: { maxQuality?: boolean; language?: TranscriptionLanguage } = {},
 ): string {
   const { maxQuality = false } = options;
   const params = new URLSearchParams({
     model: "nova-3",
+    language: normalizeTranscriptionLanguage(options.language),
     diarize_model: "latest",
     smart_format: "true",
     punctuate: "true",
   });
 
   if (maxQuality) {
-    params.set("detect_language", "true");
     params.set("paragraphs", "true");
     params.set("utterances", "true");
   }
@@ -104,7 +122,7 @@ export function createMarkdown(transcript: any): string {
 export async function transcribeWithDeepgram(
   input: TranscriptionInput,
 ): Promise<TranscriptionResult> {
-  const { apiKey, filePath, mimeType, maxQuality = false } = input;
+  const { apiKey, filePath, mimeType, language = "multi", maxQuality = false } = input;
   if (!apiKey) {
     throw new Error(
       "Missing DEEPGRAM_API_KEY. Set it in your shell before running the app.",
@@ -127,7 +145,7 @@ export async function transcribeWithDeepgram(
   } else {
     throw new Error('Transcription input has no audio source.');
   }
-  const response = await fetch(createDeepgramUrl({ maxQuality }), {
+  const response = await fetch(createDeepgramUrl({ maxQuality, language }), {
     method: "POST",
     headers: {
       Authorization: `Token ${apiKey}`,

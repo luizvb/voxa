@@ -42,3 +42,27 @@ test('protected recording media is loaded with auth before reaching the audio el
   assert.match(history, /src=\{playbackSource \|\| undefined\}/);
   assert.doesNotMatch(history, /src=\{selected\.playbackUrl\}/);
 });
+
+test('transcription language is selected in the recorder and retranscription toolbar', () => {
+  const dashboard = read('src/components/Dashboard.tsx');
+  const history = read('src/components/HistoryView.tsx');
+  const languages = read('src/lib/transcription-language.ts');
+
+  assert.match(languages, /\['en-US', 'pt-BR', 'es'\]/);
+  assert.match(dashboard, /transcription-language-field/);
+  assert.match(history, /transcription-language-control/);
+  assert.match(history, /language: transcriptionLanguage/);
+});
+
+test('web and Electron clients send language and wait for the asynchronous transcript', () => {
+  const web = read('src/platform/web-platform.ts');
+  const electron = read('app/main.js');
+  const controller = read('backend/src/controllers/recordings.ts');
+
+  assert.match(web, /language: input\.language/);
+  assert.match(web, /\/status/);
+  assert.match(web, /status\.state === 'ready'/);
+  assert.match(electron, /language: input\.language/);
+  assert.match(electron, /status\.state === 'ready'/);
+  assert.match(controller, /state IN \('uploaded', 'failed', 'ready'\)/);
+});

@@ -1,6 +1,6 @@
 import { upload } from '@vercel/blob/client';
 import { getAuthCredentials, getAuthToken } from './auth-token';
-import type { AnalysisInput, Recording, RecordingMediaSource, SaveRecordingInput, VoxaPlatform } from './types';
+import type { AnalysisInput, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
@@ -25,6 +25,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) throw new Error((await response.text()) || `Request failed (${response.status})`);
   return response.status === 204 ? undefined as T : response.json();
 }
+
+const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 export class WebPlatform implements VoxaPlatform {
   capabilities = {
@@ -56,7 +58,28 @@ export class WebPlatform implements VoxaPlatform {
   }
 
   deleteRecording(id: string) { return request<void>(`/api/recordings/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
-  transcribe(input: { recordingId: string; maxQuality?: boolean }) { return request<{ markdown: string }>(`/api/recordings/${encodeURIComponent(input.recordingId)}/transcribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxQuality: Boolean(input.maxQuality) }) }); }
+  async transcribe(input: TranscriptionInput) {
+    const recordingId = encodeURIComponent(input.recordingId);
+    await request<{ recordingId: string; state: string }>(`/api/recordings/${recordingId}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: input.language, maxQuality: Boolean(input.maxQuality) }),
+    });
+
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const status = await request<{ state: string; error?: string }>(`/api/recordings/${recordingId}/status`);
+      if (status.state === 'failed') throw new Error(status.error || 'Transcription failed.');
+      if (status.state === 'ready') {
+        const transcript = await this.getTranscript(input.recordingId);
+        if (!transcript?.markdown) throw new Error('Transcription finished without readable text.');
+        return { markdown: transcript.markdown };
+      }
+      await wait(1500);
+    }
+
+    throw new Error('Transcription is taking longer than expected. Try again in a moment.');
+  }
   getTranscript(id: string) { return request<{ markdown: string; speakers?: string[] } | null>(`/api/recordings/${encodeURIComponent(id)}/transcript`); }
   analyze(input: AnalysisInput) { return request<any>(`/api/recordings/${encodeURIComponent(input.recordingId)}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); }
   getAnalysis(id: string) { return request<any | null>(`/api/recordings/${encodeURIComponent(id)}/analysis`); }
