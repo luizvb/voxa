@@ -49,13 +49,13 @@ export function createDeepgramUrl(
     model: "nova-3",
     language: normalizeTranscriptionLanguage(options.language),
     diarize_model: "latest",
+    utterances: "true",
     smart_format: "true",
     punctuate: "true",
   });
 
   if (maxQuality) {
     params.set("paragraphs", "true");
-    params.set("utterances", "true");
   }
 
   return `${DEEPGRAM_ENDPOINT}?${params.toString()}`;
@@ -79,11 +79,18 @@ function formatSpeakerBlock(
 export function createMarkdown(transcript: any): string {
   const utterances = transcript.results?.utterances || [];
   if (utterances.length > 0) {
-    return utterances
-      .map((utterance: any) => {
-        const speaker = `Speaker ${utterance.speaker ?? "unknown"}`;
-        return `**${speaker}** (${formatTimestamp(utterance.start)})\n${utterance.transcript}`;
-      })
+    const turns: Array<{ speaker: string | number; start: number; transcripts: string[] }> = utterances.reduce((blocks: Array<{ speaker: string | number; start: number; transcripts: string[] }>, utterance: any) => {
+      const speaker = utterance.speaker ?? "unknown";
+      const previous = blocks[blocks.length - 1];
+      if (previous?.speaker === speaker) {
+        previous.transcripts.push(utterance.transcript);
+      } else {
+        blocks.push({ speaker, start: utterance.start || 0, transcripts: [utterance.transcript] });
+      }
+      return blocks;
+    }, []);
+    return turns
+      .map((turn) => `**Speaker ${turn.speaker}** (${formatTimestamp(turn.start)})\n${turn.transcripts.join(" ")}`)
       .join("\n\n");
   }
 

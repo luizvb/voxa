@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import db from '../config/db';
 import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
-import { analyzeTranscriptWithOpenRouter, extractSpeakerLabels, normalizeAnalysisModes, normalizeSelectedSpeakers } from '../services/llm';
+import { analyzeTranscriptWithOpenRouter, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
   await db.query(`
@@ -432,7 +432,13 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
     const model = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite';
 
     const modes = normalizeAnalysisModes(req.body?.modes);
-    const outputLanguage = typeof req.body?.outputLanguage === 'string' ? req.body.outputLanguage : 'pt-BR';
+    let outputLanguage;
+    try {
+      outputLanguage = normalizeAnalysisOutputLanguage(req.body?.outputLanguage);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
     const context = typeof req.body?.context === 'string' ? req.body.context : '';
     const selectedSpeakers = normalizeSelectedSpeakers(req.body?.selectedSpeakers, transcript.markdown);
     if (Array.isArray(req.body?.selectedSpeakers) && selectedSpeakers.length === 0) {

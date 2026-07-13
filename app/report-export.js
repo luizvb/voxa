@@ -27,6 +27,12 @@ const DETAIL_COPY = {
   es: { whatWorked: 'Qué funcionó', improve: 'Cómo mejorar', betterAnswer: 'Mejor estructura de respuesta', success: 'Éxito', successfulUse: 'Aciertos observados', recurringPatterns: 'Patrones recurrentes', selfCorrections: 'Autocorrecciones', missedOpportunities: 'Oportunidades perdidas', explicit: 'explícito', inferred: 'inferido', open: 'abierto', resolved: 'resuelto', accepted: 'aceptado', rejected: 'rechazado', deferred: 'aplazado' },
 };
 
+const SUMMARY_COPY = {
+  en: { purpose: 'Purpose', keyPoints: 'Key points' },
+  pt: { purpose: 'Objetivo', keyPoints: 'Pontos principais' },
+  es: { purpose: 'Objetivo', keyPoints: 'Puntos principales' },
+};
+
 function languageFor(locale) { return String(locale || '').toLowerCase().startsWith('pt') ? 'pt' : String(locale || '').toLowerCase().startsWith('es') ? 'es' : 'en'; }
 function enumLabel(value, copy) { return copy[String(value || '').toLowerCase()] || value; }
 
@@ -101,7 +107,7 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
   const safe = analysis || {};
   const summary = safe.summary || {};
   const language = languageFor(locale);
-  const copy = { ...COPY[language], ...DETAIL_COPY[language] };
+  const copy = { ...COPY[language], ...DETAIL_COPY[language], ...SUMMARY_COPY[language] };
   const generatedAt = new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(new Date());
   const recordingDate = recording?.createdAt ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(recording.createdAt)) : copy.noDate;
   const limitations = array(safe.evidenceQuality?.limitations);
@@ -122,7 +128,9 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
     h3 { margin: 8mm 0 3mm; font-size: 11px; font-weight: 700; break-after: avoid-page; page-break-after: avoid; }
     h4 { margin: 0; font-size: 9.5px; font-weight: 700; }
     p { margin: 3px 0; } .lead { max-width: 155mm; color: #4f524d; font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.55; }
-    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7mm; } .meta p { color: #393b38; }
+    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid #c9cbc7; border-bottom: 1px solid #c9cbc7; } .meta > div { min-height: 18mm; padding: 4mm 4mm 3mm 0; } .meta > div + div { padding-left: 4mm; border-left: 1px solid #e3e4e1; } .meta p { color: #393b38; }
+    .purpose { margin: 0 0 7mm; padding: 4mm 5mm; border: 1px solid #d9dbd6; background: #f6f7f4; } .purpose p { margin-top: 1mm; }
+    .key-points { margin-top: 9mm; } .key-points ol { margin: 3mm 0 0; padding: 0; list-style: none; counter-reset: keypoint; } .key-points li { counter-increment: keypoint; display: grid; grid-template-columns: 9mm 1fr; gap: 3mm; padding: 4mm 0; border-top: 1px solid #e3e4e1; } .key-points li::before { content: counter(keypoint, decimal-leading-zero); color: #70736e; font-size: 8px; font-weight: 700; }
     .section { margin: 0 0 12mm; } .mode-section ~ .mode-section { page-break-before: always; }
     .columns, .quad, .triple, .cards { display: block; }
     .columns > div, .quad > div, .triple > div { margin: 0 0 7mm; }
@@ -143,8 +151,8 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
     .correction { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; margin-top: 3mm; } .correction strong { float: none; color: #30332f; }
     .manager > h3 { max-width: 155mm; margin-top: 3px; font-family: Georgia, "Times New Roman", serif; font-size: 13px; font-weight: 400; line-height: 1.5; }
     footer { margin-top: 7mm; color: #7b7e79; font-size: 7.5px; } footer b { color: #444743; }
-  </style></head><body data-layout="editorial-minimal">
-    <section class="cover"><div class="brand">Voxa<i>.</i></div><div class="hero"><span class="eyebrow">${copy.report}</span><h1>${text(recording?.name, summary.title || 'Conversation report')}</h1><p class="lead">${text(summary.executiveBrief?.statement || summary.overview)}</p></div><div><div class="meta"><div><small>${copy.recorded}</small><p>${escapeHtml(recordingDate)}</p></div><div><small>${copy.generated}</small><p>${escapeHtml(generatedAt)}</p></div><div><small>${copy.modes}</small><p>${text(array(safe.analysisModes).join(', '))}</p></div><div><small>${copy.quality}</small><p>${text(safe.evidenceQuality?.level)}</p></div></div>${limitations.length ? `<h3>${copy.limitations}</h3>${list(limitations)}` : ''}<footer><b>Voxa:</b> ${copy.verify}</footer></div></section>
+  </style></head><body data-layout="editorial-minimal" data-report-version="analysis-aligned">
+    <section class="cover"><div class="brand">Voxa<i>.</i></div><div class="hero"><span class="eyebrow">${copy.report}</span><h1>${text(summary.title || recording?.name, 'Conversation report')}</h1><p class="lead">${text(summary.executiveBrief?.statement || summary.overview)}</p></div>${summary.purpose?.statement ? `<div class="purpose"><small>${copy.purpose}</small><p>${text(summary.purpose.statement)}</p></div>` : ''}<div><div class="meta"><div><small>${copy.recorded}</small><p>${escapeHtml(recordingDate)}</p></div><div><small>${copy.generated}</small><p>${escapeHtml(generatedAt)}</p></div><div><small>${copy.modes}</small><p>${text(array(safe.analysisModes).join(', '))}</p></div><div><small>${copy.quality}</small><p>${text(safe.evidenceQuality?.level)}</p></div></div>${array(summary.keyPoints).length ? `<div class="key-points"><h3>${copy.keyPoints}</h3><ol>${array(summary.keyPoints).map((item) => `<li><span>${text(item.statement || item)}</span></li>`).join('')}</ol></div>` : ''}${limitations.length ? `<h3>${copy.limitations}</h3>${list(limitations)}` : ''}<footer><b>Voxa:</b> ${copy.verify}</footer></div></section>
     ${buildInterview(safe.interview, copy)}
     ${buildLanguage(safe.languageClass, safe.speakers, copy)}
     ${buildMeeting(safe.meeting, copy)}

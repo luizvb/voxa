@@ -27,8 +27,12 @@ test('web PDF export downloads a generated PDF without opening a blank tab', () 
 
   assert.doesNotMatch(platform, /window\.open/);
   assert.match(platform, /downloadAnalysisPdf/);
-  assert.match(pdf, /doc\.output\('blob'\)/);
+  assert.match(pdf, /createAnalysisPdfDocument\(input\)\.output\('blob'\)/);
   assert.match(pdf, /anchor\.download = fileName/);
+  assert.match(pdf, /createAnalysisPdfDocument/);
+  assert.match(pdf, /summary\.keyPoints/);
+  assert.match(pdf, /addStatStrip/);
+  assert.match(pdf, /modeEntries/);
 });
 
 test('protected recording media is loaded with auth before reaching the audio element', () => {
@@ -65,4 +69,14 @@ test('web and Electron clients send language and wait for the asynchronous trans
   assert.match(electron, /language: input\.language/);
   assert.match(electron, /status\.state === 'ready'/);
   assert.match(controller, /state IN \('uploaded', 'failed', 'ready'\)/);
+});
+
+test('automatic and manual insights use the platform locale as output language', () => {
+  const history = read('src/components/HistoryView.tsx');
+  const backend = read('backend/src/services/llm.ts');
+
+  assert.match(history, /language === 'pt' \? 'pt-BR' : language === 'es' \? 'es-ES' : 'en-US'/);
+  assert.ok((history.match(/outputLanguage: locale/g) || []).length >= 2);
+  assert.match(backend, /OUTPUT LANGUAGE CONTRACT — MANDATORY/);
+  assert.match(backend, /Evidence\.quote and correction\.original are the only language exceptions/);
 });

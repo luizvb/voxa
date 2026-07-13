@@ -1,13 +1,30 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { ANALYSIS_CONTRACT_VERSION, buildAnalysisOutputContract, buildAnalysisPrompt, extractSpeakerLabels, normalizeAnalysisModes, normalizeSelectedSpeakers, sanitizeAnalysisResult } = require('../dist/services/llm');
+const { ANALYSIS_CONTRACT_VERSION, buildAnalysisOutputContract, buildAnalysisPrompt, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, sanitizeAnalysisResult } = require('../dist/services/llm');
 const { completeJsonWithOpenRouter } = require('../dist/services/llm');
 
 test('analysis modes are validated, deduplicated and default to language', () => {
   assert.deepEqual(normalizeAnalysisModes(['meeting', 'interview', 'meeting', 'invalid']), ['meeting', 'interview']);
   assert.deepEqual(normalizeAnalysisModes([]), ['language']);
   assert.deepEqual(normalizeAnalysisModes('meeting'), ['language']);
+});
+
+test('insight output language is limited to the three platform languages', () => {
+  assert.equal(normalizeAnalysisOutputLanguage(undefined), 'pt-BR');
+  assert.equal(normalizeAnalysisOutputLanguage('en-US'), 'en-US');
+  assert.equal(normalizeAnalysisOutputLanguage('pt-BR'), 'pt-BR');
+  assert.equal(normalizeAnalysisOutputLanguage('es-ES'), 'es-ES');
+  assert.throws(() => normalizeAnalysisOutputLanguage('pt'), /Unsupported insight language/);
+});
+
+test('analysis prompt keeps narrative in the platform language and evidence verbatim', () => {
+  for (const [locale, name] of [['en-US', 'English'], ['pt-BR', 'Brazilian Portuguese'], ['es-ES', 'Spanish']]) {
+    const prompt = buildAnalysisPrompt('Ana: Vamos começar.', { modes: ['meeting'], outputLanguage: locale });
+    assert.match(prompt, new RegExp(`every human-readable analysis value in ${name}`));
+    assert.match(prompt, /Evidence\.quote and correction\.original are the only language exceptions/);
+    assert.match(prompt, new RegExp(`summary\\.language to exactly "${locale}"`));
+  }
 });
 
 test('speaker labels are extracted from Deepgram markdown and common pasted transcript formats', () => {

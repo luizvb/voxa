@@ -46,6 +46,23 @@ export interface AnalyzeOptions {
   systemPrompt?: string;
 }
 
+export const ANALYSIS_OUTPUT_LANGUAGES = ['en-US', 'pt-BR', 'es-ES'] as const;
+export type AnalysisOutputLanguage = typeof ANALYSIS_OUTPUT_LANGUAGES[number];
+
+const ANALYSIS_OUTPUT_LANGUAGE_NAMES: Record<AnalysisOutputLanguage, string> = {
+  'en-US': 'English',
+  'pt-BR': 'Brazilian Portuguese',
+  'es-ES': 'Spanish'
+};
+
+export function normalizeAnalysisOutputLanguage(value: unknown): AnalysisOutputLanguage {
+  if (value === undefined || value === null || value === '') return 'pt-BR';
+  if (typeof value === 'string' && ANALYSIS_OUTPUT_LANGUAGES.includes(value as AnalysisOutputLanguage)) {
+    return value as AnalysisOutputLanguage;
+  }
+  throw new RangeError('Unsupported insight language. Use en-US, pt-BR, or es-ES.');
+}
+
 export interface JsonCompletionResult<T = any> {
   data: T;
   usage: LLMUsage;
@@ -276,7 +293,8 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
 
 export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOptions = {}): string {
   const modes = normalizeAnalysisModes(options.modes);
-  const outputLanguage = String(options.outputLanguage || 'pt-BR').slice(0, 32);
+  const outputLanguage = normalizeAnalysisOutputLanguage(options.outputLanguage);
+  const outputLanguageName = ANALYSIS_OUTPUT_LANGUAGE_NAMES[outputLanguage];
   const context = String(options.context || '').trim().slice(0, 2000);
   const selectedSpeakers = normalizeSelectedSpeakers(options.selectedSpeakers, transcriptText);
 
@@ -310,11 +328,18 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 
   const selectedInstructions = modes.map((mode) => modeInstructions[mode]).join('\n\n');
   const outputContract = JSON.stringify(buildAnalysisOutputContract(modes), null, 2);
-  return `Create a Voxa specialist analysis in ${outputLanguage}.
+  return `Create a Voxa specialist analysis in ${outputLanguageName} (${outputLanguage}).
 Selected modes: ${modes.join(', ')}.
 ${selectedSpeakers.length ? `Participant-specific insights requested for: ${selectedSpeakers.join(', ')}. Use the entire transcript as context, but create learnerProfiles, participantViews, corrections and other speaker-specific evaluations only for these selected labels. Include every selected label when there is enough evidence; do not silently analyze only the first participant.\n` : ''}
 ${context ? `Optional user context: ${context}\nRemember: context guides relevance but is not transcript evidence.\n` : ''}
 ${selectedInstructions}
+
+OUTPUT LANGUAGE CONTRACT — MANDATORY
+- Write every human-readable analysis value in ${outputLanguageName}, even when the transcript is in another language.
+- Do not copy the transcript language into summaries, explanations, assessments, recommendations, risks, labels or limitations unless it is ${outputLanguageName}.
+- Keep JSON property names, schema enum values, speaker labels and the fixed output structure exactly as specified below.
+- Evidence.quote and correction.original are the only language exceptions: copy those passages verbatim from the transcript and never translate them.
+- Set summary.language to exactly "${outputLanguage}".
 
 EVIDENCE OBJECT
 ${JSON.stringify(evidenceExample)}
