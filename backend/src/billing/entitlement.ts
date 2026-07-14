@@ -10,6 +10,16 @@ export type VoxaEntitlementRow = {
   billing_reconciliation_required?: boolean | null;
 };
 
+export const VOXA_ENTITLEMENT_SELECT = `
+      SELECT subscription_status,
+             subscription_cancel_at_period_end AS cancel_at_period_end,
+             subscription_grace_until AS grace_until,
+             checkout_pending_until, billing_reconciliation_required
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+    `;
+
 export function voxaProEntitlement(row: VoxaEntitlementRow | undefined, now = new Date()) {
   const normalizedState = voxaNormalizedBillingState(row ? {
     status: row.subscription_status,
@@ -23,13 +33,7 @@ export function voxaProEntitlement(row: VoxaEntitlementRow | undefined, now = ne
 
 export async function requireVoxaPro(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { rows } = await db.query(`
-      SELECT subscription_status, cancel_at_period_end, grace_until,
-             checkout_pending_until, billing_reconciliation_required
-      FROM users
-      WHERE id = $1
-      LIMIT 1
-    `, [req.user!.id]);
+    const { rows } = await db.query(VOXA_ENTITLEMENT_SELECT, [req.user!.id]);
     const decision = voxaProEntitlement(rows[0] as VoxaEntitlementRow | undefined);
     if (!decision.allowed) {
       res.status(402).json({ error: 'Voxa Pro is required to start provider transcription or AI analysis.', code: 'VOXA_PRO_REQUIRED', billingPath: '/?billing=required', billingState: decision.normalizedState });
