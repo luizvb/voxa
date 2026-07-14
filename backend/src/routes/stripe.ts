@@ -151,14 +151,32 @@ async function claimStripeEvent(event: Stripe.Event) {
   throw new BillingConfigurationError('Stripe event is already being processed.', 503, 'BILLING_EVENT_IN_PROGRESS');
 }
 
+export const VOXA_STRIPE_EVENT_MARK_SQL = `UPDATE stripe_event_receipts
+     SET status = $2::VARCHAR(20), error_code = $3,
+         processed_at = CASE WHEN $2::VARCHAR(20) = 'processed' THEN NOW() ELSE processed_at END,
+         updated_at = NOW()
+     WHERE event_id = $1`;
+
 async function markStripeEvent(eventId: string, status: 'processed' | 'failed', errorCode?: string) {
   await query(
-    `UPDATE stripe_event_receipts SET status = $2, error_code = $3,
-            processed_at = CASE WHEN $2 = 'processed' THEN NOW() ELSE processed_at END,
-            updated_at = NOW() WHERE event_id = $1`,
+    VOXA_STRIPE_EVENT_MARK_SQL,
     [eventId, status, errorCode?.slice(0, 80) ?? null],
   );
 }
+
+export const VOXA_SUBSCRIPTION_RECONCILE_SQL = `UPDATE users
+     SET stripe_customer_id = $1, stripe_subscription_id = $2,
+         subscription_status = $3::VARCHAR(50), subscription_price_id = $4,
+         subscription_period_start = $5, subscription_period_end = $6,
+         subscription_cancel_at_period_end = $7, subscription_grace_until = $8,
+         subscription_provider_updated_at = $9::TIMESTAMPTZ, subscription_provider_event_id = $10,
+         billing_reconciliation_required = FALSE,
+         checkout_pending_token = NULL, checkout_pending_until = NULL
+     WHERE id = $11
+       AND (subscription_provider_updated_at IS NULL
+         OR subscription_provider_updated_at < $9::TIMESTAMPTZ
+         OR (subscription_provider_updated_at = $9::TIMESTAMPTZ
+           AND NOT (subscription_status IN ('active', 'trialing') AND $3::VARCHAR(50) IN ('past_due', 'unpaid'))))`;
 
 async function reconcileSubscription(subscription: Stripe.Subscription, event: Stripe.Event, fallbackUserId?: string) {
   const config = voxaStripeConfig();
@@ -168,18 +186,7 @@ async function reconcileSubscription(subscription: Stripe.Subscription, event: S
   const snapshot = voxaSubscriptionSnapshot(subscription, event.created, Number(process.env.BILLING_GRACE_DAYS ?? 3));
   const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
   await query(
-    `UPDATE users SET stripe_customer_id = $1, stripe_subscription_id = $2,
-            subscription_status = $3, subscription_price_id = $4,
-            subscription_period_start = $5, subscription_period_end = $6,
-            subscription_cancel_at_period_end = $7, subscription_grace_until = $8,
-            subscription_provider_updated_at = $9, subscription_provider_event_id = $10,
-            billing_reconciliation_required = FALSE,
-            checkout_pending_token = NULL, checkout_pending_until = NULL
-     WHERE id = $11
-       AND (subscription_provider_updated_at IS NULL
-         OR subscription_provider_updated_at < $9
-         OR (subscription_provider_updated_at = $9
-           AND NOT (subscription_status IN ('active', 'trialing') AND $3 IN ('past_due', 'unpaid'))))`,
+    VOXA_SUBSCRIPTION_RECONCILE_SQL,
     [customerId, subscription.id, snapshot.status, config.priceId, snapshot.periodStart, snapshot.periodEnd, snapshot.cancelAtPeriodEnd, snapshot.graceUntil, snapshot.providerUpdatedAt, event.id, userId],
   );
 }
