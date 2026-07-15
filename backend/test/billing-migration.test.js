@@ -36,3 +36,15 @@ test('automatic trial migration is additive, exact and does not backfill existin
   assert.match(schema, /'trial_started_at'/);
   assert.match(schema, /'trial_ends_at'/);
 });
+
+test('billing identity migration restores the Stripe columns required by runtime queries', () => {
+  const migration = readFileSync('migrations/20260715_billing_identity.sql', 'utf8');
+  const schema = readFileSync('scripts/billing-schema.mjs', 'utf8');
+  for (const column of ['stripe_customer_id', 'stripe_subscription_id', 'subscription_status', 'subscription_price_id']) {
+    assert.match(migration, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`, 'i'));
+    assert.match(schema, new RegExp(`'${column}'`));
+  }
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_customer_id_uq/i);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_subscription_id_uq/i);
+  assert.doesNotMatch(migration, /UPDATE\s+users/i);
+});

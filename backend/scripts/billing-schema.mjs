@@ -1,4 +1,8 @@
 export const REQUIRED_BILLING_COLUMNS = [
+  'stripe_customer_id',
+  'stripe_subscription_id',
+  'subscription_status',
+  'subscription_price_id',
   'subscription_period_start',
   'subscription_period_end',
   'subscription_cancel_at_period_end',
