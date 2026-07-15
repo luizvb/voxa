@@ -8,6 +8,9 @@
   "scripts": {
     "dev": "nodemon --exec ts-node --files src/server.ts",
     "build": "tsc",
+    "vercel-build": "npm run db:check && npm run build",
+    "db:check": "node scripts/check-billing-schema.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
     "start": "node dist/server.js",
     "test": "npm run build && node --test test/*.test.js"
   },

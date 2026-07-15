@@ -124,6 +124,19 @@ Configure `VITE_NEON_AUTH_URL`, `NEON_AUTH_URL`, `DATABASE_URL`, Blob, Deepgram,
 OpenRouter, and Stripe environment variables. API requests require a Neon Auth
 JWT; the server never accepts a client-provided user id.
 
+Before deploying a backend version that changes billing persistence, apply and
+verify the repository migrations with a direct Neon connection:
+
+```bash
+cd backend
+DIRECT_URL="<direct-neon-connection>" npm run db:migrate
+npm run db:check
+```
+
+Vercel runs the read-only schema check before compiling the backend, so code that
+depends on an unapplied billing migration fails the deployment instead of failing
+the authenticated plan screen at runtime.
+
 ## Desktop release (macOS + Windows)
 
 The packaged desktop app defaults to the stable production API at

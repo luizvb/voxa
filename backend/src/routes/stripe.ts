@@ -13,9 +13,23 @@ function stripeClient() {
   return { config, stripe: new Stripe(config.key, { apiVersion: '2026-06-24.dahlia', appInfo: { name: 'Voxa', version: '0.1.1' } }) };
 }
 
+export function billingDatabaseError(error: unknown) {
+  const code = String((error as { code?: unknown })?.code ?? '');
+  if (code === '42703' || code === '42P01') {
+    return { statusCode: 503, code: 'BILLING_SCHEMA_OUTDATED' };
+  }
+  return null;
+}
+
 function billingErrorResponse(error: unknown, res: Response) {
   if (error instanceof BillingConfigurationError) {
     res.status(error.statusCode).json({ error: error.code });
+    return;
+  }
+  const databaseError = billingDatabaseError(error);
+  if (databaseError) {
+    console.error('Stripe billing database schema is outdated', { code: String((error as { code?: unknown })?.code).slice(0, 80) });
+    res.status(databaseError.statusCode).json({ error: databaseError.code });
     return;
   }
   console.error('Stripe billing request failed', { code: String((error as { code?: unknown })?.code ?? 'BILLING_REQUEST_FAILED').slice(0, 80) });
