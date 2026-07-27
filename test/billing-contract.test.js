@@ -27,9 +27,10 @@ test('billing UI explains no-card trial and required checkout after expiry', () 
   assert.match(source, /trialExpiredTitle/);
   assert.match(source, /subscribeContinue/);
   assert.match(locales, /Seu teste de 7 dias terminou/);
-  assert.match(locales, /O Voxa está bloqueado até você assinar/);
-  assert.match(app, /normalizedState === 'trial_expired'/);
-  assert.match(app, /lockedToBilling=\{billingGate === 'locked'\}/);
+  assert.match(locales, /Sua biblioteca continua visível/);
+  assert.match(app, /billingGate === 'locked'/);
+  assert.match(app, /setShowContentPaywall\(true\)/);
+  assert.match(app, /contentLockedTitle/);
   assert.match(types, /trial_active/);
   assert.match(types, /trial_expired/);
 });

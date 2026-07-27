@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FilePlus2, Plus, X } from 'lucide-react';
+import { ArrowUpRight, FilePlus2, LockKeyhole, Plus, X } from 'lucide-react';
 import ComponentsShowcase from './components/ComponentsShowcase';
 import Dashboard from './components/Dashboard';
 import ExtensionAuth from './components/ExtensionAuth';
@@ -36,6 +36,7 @@ export default function App() {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [autoProcessRecordingId, setAutoProcessRecordingId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [showContentPaywall, setShowContentPaywall] = useState(false);
   const [billingGate, setBillingGate] = useState<'checking' | 'open' | 'locked'>('checking');
 
   const isElectronApp = platform.capabilities.kind === 'electron';
@@ -66,10 +67,14 @@ export default function App() {
   }, [t]);
 
   const handleSelectRecording = useCallback((id: string | null, autoProcess = false) => {
+    if (id && billingGate === 'locked') {
+      setShowContentPaywall(true);
+      return;
+    }
     setSelectedRecordingId(id);
     setAutoProcessRecordingId(autoProcess && id ? id : null);
     setActiveView('library');
-  }, []);
+  }, [billingGate]);
 
   useEffect(() => {
     setIsWidget(window.location.hash === '#/widget');
@@ -101,7 +106,6 @@ export default function App() {
         if (!current) return;
         const locked = status.normalizedState === 'trial_expired';
         setBillingGate(locked ? 'locked' : 'open');
-        if (locked) setActiveView('billing');
       })
       .catch(() => { if (current) setBillingGate('open'); });
     return () => { current = false; };
@@ -110,7 +114,6 @@ export default function App() {
   const handleBillingStatusChange = useCallback((status: BillingStatus) => {
     const locked = status.normalizedState === 'trial_expired';
     setBillingGate(locked ? 'locked' : 'open');
-    if (locked) setActiveView('billing');
   }, []);
 
   useEffect(() => {
@@ -164,8 +167,12 @@ export default function App() {
       setShowLoginModal(false);
       return;
     }
+    if (showContentPaywall) {
+      setShowContentPaywall(false);
+      return;
+    }
     if (selectedRecordingId) setSelectedRecordingId(null);
-  }, [isImportDialogOpen, selectedRecordingId, showLoginModal]);
+  }, [isImportDialogOpen, selectedRecordingId, showContentPaywall, showLoginModal]);
 
   useKeyboardActions({ enabled: isElectronApp && !isWidget, onEscape: handleEscape });
 
@@ -233,6 +240,23 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showContentPaywall && (
+          <motion.div className="modal-layer no-drag" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-labelledby="content-paywall-title">
+            <motion.div className="confirm-dialog content-paywall" initial={{ opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.99 }} transition={{ duration: 0.16 }}>
+              <button type="button" className="icon-button confirm-close" onClick={() => setShowContentPaywall(false)} aria-label={t('common', 'close')} data-keyboard-cancel="true"><X /></button>
+              <span className="confirm-icon"><LockKeyhole /></span>
+              <h3 id="content-paywall-title">{t('billing', 'contentLockedTitle')}</h3>
+              <p>{t('billing', 'contentLockedDetail')}</p>
+              <div className="confirm-actions">
+                <button type="button" className="button button-secondary" onClick={() => setShowContentPaywall(false)}>{t('billing', 'continueBrowsing')}</button>
+                <button type="button" className="button button-primary" onClick={() => { setShowContentPaywall(false); setActiveView('billing'); }}>{t('billing', 'viewPlans')}<ArrowUpRight /></button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
       </AnimatePresence>
 
@@ -246,7 +270,6 @@ export default function App() {
           collapsed={sidebarCollapsed}
           showToggle={!isCompact}
           onToggle={() => setIsSidebarOpen((value) => !value)}
-          lockedToBilling={billingGate === 'locked'}
         />
       </aside>
 
