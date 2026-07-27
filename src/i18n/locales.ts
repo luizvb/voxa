@@ -27,6 +27,7 @@ export const locales = {
     },
     workspace: {
       title: 'Capture what matters', subtitle: 'Record the conversation now. Voxa will organize the rest.',
+      greeting: 'Hello, {name}. Ready to start recording?', greetingGuest: 'Ready to start recording?', greetingDescription: 'Capture the conversation now. Voxa will organize the rest.',
       recent: 'Recent conversations', recentDescription: 'Your latest recordings, ready to continue.',
       viewLibrary: 'View library', emptyTitle: 'No conversations yet',
       emptyDescription: 'Your first saved recording will appear here.',
@@ -130,6 +131,7 @@ export const locales = {
     },
     workspace: {
       title: 'Capture o que importa', subtitle: 'Grave a conversa agora. O Voxa organiza o restante.',
+      greeting: 'Olá, {name}. Vamos começar a gravar?', greetingGuest: 'Vamos começar a gravar?', greetingDescription: 'Grave a conversa agora. O Voxa organiza o restante.',
       recent: 'Conversas recentes', recentDescription: 'Suas últimas gravações, prontas para continuar.',
       viewLibrary: 'Ver biblioteca', emptyTitle: 'Nenhuma conversa ainda',
       emptyDescription: 'Sua primeira gravação salva aparecerá aqui.',
@@ -233,6 +235,7 @@ export const locales = {
     },
     workspace: {
       title: 'Captura lo que importa', subtitle: 'Graba la conversación ahora. Voxa organiza el resto.',
+      greeting: 'Hola, {name}. ¿Empezamos a grabar?', greetingGuest: '¿Empezamos a grabar?', greetingDescription: 'Graba la conversación ahora. Voxa organiza el resto.',
       recent: 'Conversaciones recientes', recentDescription: 'Tus últimas grabaciones, listas para continuar.',
       viewLibrary: 'Ver biblioteca', emptyTitle: 'Aún no hay conversaciones',
       emptyDescription: 'Tu primera grabación guardada aparecerá aquí.',

@@ -20,6 +20,7 @@ import {
 import type { LibraryStatus } from '../App';
 import { platform, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../hooks/useAuth';
 import { useRecorder } from '../hooks/useRecorder';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 
@@ -55,6 +56,7 @@ export default function Dashboard({
   onRecordingComplete,
 }: DashboardProps) {
   const { t, language } = useLanguage();
+  const { user } = useAuth();
   const {
     isRecording,
     isPaused,
@@ -79,6 +81,10 @@ export default function Dashboard({
   const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>(() => getSavedTranscriptionLanguage(language));
 
   const currentShortcut = shortcutLabels[shortcutSettings.record] || shortcutSettings.record;
+  const firstName = (user?.name || user?.email?.split('@')[0] || '').trim().split(/\s+/)[0];
+  const welcomeMessage = firstName
+    ? t('workspace', 'greeting').replace('{name}', firstName)
+    : t('workspace', 'greetingGuest');
   const recentRecordings = useMemo(
     () => [...recordings]
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
@@ -172,8 +178,8 @@ export default function Dashboard({
             <span className="status-dot" />
             {phaseLabel}
           </span>
-          <h2>{t('workspace', 'title')}</h2>
-          <p>{t('workspace', 'subtitle')}</p>
+          <h2>{welcomeMessage}</h2>
+          <p>{t('workspace', 'greetingDescription')}</p>
         </div>
         <div className="workspace-tools">
           {platform.capabilities.globalShortcuts && <div className="shortcut-control">

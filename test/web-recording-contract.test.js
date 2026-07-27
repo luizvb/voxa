@@ -21,6 +21,18 @@ test('web recorder exposes direct microphone and shared tab or screen capture wi
   assert.match(recorder, /systemAudio: 'include'/);
 });
 
+test('workspace welcomes the signed-in user in the selected language', () => {
+  const dashboard = read('src/components/Dashboard.tsx');
+  const locales = read('src/i18n/locales.ts');
+
+  assert.match(dashboard, /useAuth\(\)/);
+  assert.match(dashboard, /t\('workspace', 'greeting'\)\.replace\('\{name\}', firstName\)/);
+  assert.match(dashboard, /greetingGuest/);
+  assert.match(locales, /Olá, \{name\}\. Vamos começar a gravar\?/);
+  assert.match(locales, /Hello, \{name\}\. Ready to start recording\?/);
+  assert.match(locales, /Hola, \{name\}\. ¿Empezamos a grabar\?/);
+});
+
 test('web PDF export downloads a generated PDF without opening a blank tab', () => {
   const platform = read('src/platform/web-platform.ts');
   const pdf = read('src/lib/browser-pdf.ts');
