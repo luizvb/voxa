@@ -13,7 +13,7 @@ import BillingView from './components/BillingView';
 import { useAuth } from './hooks/useAuth';
 import { useKeyboardActions } from './hooks/useKeyboardActions';
 import { useLanguage } from './contexts/LanguageContext';
-import { platform, type Recording } from './platform';
+import { platform, type BillingStatus, type Recording } from './platform';
 
 export type AppView = 'workspace' | 'library' | 'billing';
 export type LibraryStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -36,6 +36,7 @@ export default function App() {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [autoProcessRecordingId, setAutoProcessRecordingId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [billingGate, setBillingGate] = useState<'checking' | 'open' | 'locked'>('checking');
 
   const isElectronApp = platform.capabilities.kind === 'electron';
   const isUiPreview = import.meta.env.DEV && window.location.hash === '#/ui';
@@ -86,6 +87,31 @@ export default function App() {
     if (isLoading || !isAuthenticated) return;
     loadRecordings();
   }, [isAuthenticated, isLoading, loadRecordings]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) {
+      setBillingGate('open');
+      return;
+    }
+    let current = true;
+    setBillingGate('checking');
+    void platform.getBillingStatus()
+      .then((status) => {
+        if (!current) return;
+        const locked = status.normalizedState === 'trial_expired';
+        setBillingGate(locked ? 'locked' : 'open');
+        if (locked) setActiveView('billing');
+      })
+      .catch(() => { if (current) setBillingGate('open'); });
+    return () => { current = false; };
+  }, [isAuthenticated, isLoading]);
+
+  const handleBillingStatusChange = useCallback((status: BillingStatus) => {
+    const locked = status.normalizedState === 'trial_expired';
+    setBillingGate(locked ? 'locked' : 'open');
+    if (locked) setActiveView('billing');
+  }, []);
 
   useEffect(() => {
     const handleShowLogin = () => setShowLoginModal(true);
@@ -159,10 +185,14 @@ export default function App() {
     );
   }
 
+  if (isAuthenticated && billingGate === 'checking') {
+    return <div className="app-loading drag-region"><div className="app-loading-mark" aria-hidden>V</div><span>{t('common', 'loading')}</span></div>;
+  }
+
   const pageTitle = activeView === 'workspace'
     ? t('navigation', 'workspace')
     : activeView === 'billing'
-      ? 'Plan and billing'
+      ? t('billing', 'eyebrow')
     : selectedRecordingId
       ? t('navigation', 'conversation')
       : t('navigation', 'library');
@@ -216,6 +246,7 @@ export default function App() {
           collapsed={sidebarCollapsed}
           showToggle={!isCompact}
           onToggle={() => setIsSidebarOpen((value) => !value)}
+          lockedToBilling={billingGate === 'locked'}
         />
       </aside>
 
@@ -278,7 +309,7 @@ export default function App() {
               </motion.div>
             ) : activeView === 'billing' ? (
               <motion.div key="billing" className="view-frame" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.14 }}>
-                <BillingView />
+                <BillingView onStatusChange={handleBillingStatusChange} />
               </motion.div>
             ) : (
               <motion.div

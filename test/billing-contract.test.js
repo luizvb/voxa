@@ -4,10 +4,12 @@ const test = require('node:test');
 
 test('billing UI discloses approved Voxa Pro amount and entitlement before Checkout', () => {
   const source = readFileSync('src/components/BillingView.tsx', 'utf8');
-  assert.match(source, /R\$ 14,90\/month/);
-  assert.match(source, /tax-exclusive/);
-  assert.match(source, /provider transcription and AI specialist reports with Pro/);
-  assert.match(source, /Keep and read recordings, transcripts and reports after cancellation/);
+  const locales = readFileSync('src/i18n/locales.ts', 'utf8');
+  assert.match(source, /copy\('price'\)/);
+  assert.match(locales, /R\$ 14,90\/month after the trial/);
+  assert.match(locales, /sem impostos/);
+  assert.match(locales, /provider transcription and AI specialist reports with Pro/);
+  assert.match(locales, /Mantenha e leia gravações, transcrições e relatórios após o cancelamento/);
 });
 
 test('only provider-funded transcription and AI analysis require Pro', () => {
@@ -19,10 +21,15 @@ test('only provider-funded transcription and AI analysis require Pro', () => {
 
 test('billing UI explains no-card trial and required checkout after expiry', () => {
   const source = readFileSync('src/components/BillingView.tsx', 'utf8');
+  const app = readFileSync('src/App.tsx', 'utf8');
+  const locales = readFileSync('src/i18n/locales.ts', 'utf8');
   const types = readFileSync('src/platform/types.ts', 'utf8');
-  assert.match(source, /7-day trial active — no card required/);
-  assert.match(source, /Your 7-day trial has ended/);
-  assert.match(source, /Subscribe to continue — card required/);
+  assert.match(source, /trialExpiredTitle/);
+  assert.match(source, /subscribeContinue/);
+  assert.match(locales, /Seu teste de 7 dias terminou/);
+  assert.match(locales, /O Voxa está bloqueado até você assinar/);
+  assert.match(app, /normalizedState === 'trial_expired'/);
+  assert.match(app, /lockedToBilling=\{billingGate === 'locked'\}/);
   assert.match(types, /trial_active/);
   assert.match(types, /trial_expired/);
 });

@@ -23,6 +23,7 @@ interface SidebarProps {
   collapsed: boolean;
   showToggle: boolean;
   onToggle: () => void;
+  lockedToBilling?: boolean;
 }
 
 const languages = [
@@ -31,7 +32,7 @@ const languages = [
   { id: 'es' as const, mark: 'ES', label: 'Español' },
 ];
 
-export default function Sidebar({ activeView, onViewChange, collapsed, showToggle, onToggle }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, collapsed, showToggle, onToggle, lockedToBilling = false }: SidebarProps) {
   const { t, language, setLanguage } = useLanguage();
   const { user, logout, isAuthenticated, loginWithRedirect } = useAuth();
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
@@ -48,8 +49,8 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
   const navItems = [
     { id: 'workspace' as const, icon: AudioLines, label: t('navigation', 'workspace') },
     { id: 'library' as const, icon: Library, label: t('navigation', 'library') },
-    { id: 'billing' as const, icon: CreditCard, label: 'Plan and billing' },
-  ];
+    { id: 'billing' as const, icon: CreditCard, label: t('billing', 'eyebrow') },
+  ].filter((item) => !lockedToBilling || item.id === 'billing');
 
   const handleUpgrade = async () => {
     if (!isAuthenticated) {
@@ -66,7 +67,8 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
         <button
           type="button"
           className="brand-button no-drag"
-          onClick={() => onViewChange('workspace')}
+          onClick={() => !lockedToBilling && onViewChange('workspace')}
+          disabled={lockedToBilling}
           aria-label={t('navigation', 'workspace')}
         >
           <span className="brand-mark"><Logo /></span>
