@@ -252,7 +252,6 @@ export default function Dashboard({
                 <option value={item} key={item}>{t('common', item === 'pt-BR' ? 'portuguese' : item === 'es' ? 'spanish' : 'english')}</option>
               ))}
             </select>
-            <small>{t('recorder', 'transcriptionLanguageDescription')}</small>
           </label>
 
           <p className="recorder-description">
@@ -332,10 +331,6 @@ export default function Dashboard({
               <span key={index} style={{ height: `${18 + ((index * 29) % 72)}%` }} />
             ))}
           </div>
-          <dl className="signal-details">
-            <div><dt>{t('recorder', 'input')}</dt><dd>{captureMode === 'shared' ? t('recorder', 'inputShared') : t('recorder', 'inputMicrophone')}</dd></div>
-            <div><dt>{t('recorder', 'saveMode')}</dt><dd>{t('recorder', 'localFirst')}</dd></div>
-          </dl>
         </aside>
       </section>
 

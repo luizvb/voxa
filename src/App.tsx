@@ -38,6 +38,7 @@ export default function App() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [showContentPaywall, setShowContentPaywall] = useState(false);
   const [billingGate, setBillingGate] = useState<'checking' | 'open' | 'locked'>('checking');
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   const isElectronApp = platform.capabilities.kind === 'electron';
   const isUiPreview = import.meta.env.DEV && window.location.hash === '#/ui';
@@ -96,6 +97,7 @@ export default function App() {
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
+      setBillingStatus(null);
       setBillingGate('open');
       return;
     }
@@ -104,6 +106,7 @@ export default function App() {
     void platform.getBillingStatus()
       .then((status) => {
         if (!current) return;
+        setBillingStatus(status);
         const locked = status.normalizedState === 'trial_expired';
         setBillingGate(locked ? 'locked' : 'open');
       })
@@ -112,6 +115,7 @@ export default function App() {
   }, [isAuthenticated, isLoading]);
 
   const handleBillingStatusChange = useCallback((status: BillingStatus) => {
+    setBillingStatus(status);
     const locked = status.normalizedState === 'trial_expired';
     setBillingGate(locked ? 'locked' : 'open');
   }, []);
@@ -270,6 +274,7 @@ export default function App() {
           collapsed={sidebarCollapsed}
           showToggle={!isCompact}
           onToggle={() => setIsSidebarOpen((value) => !value)}
+          billingStatus={billingStatus}
         />
       </aside>
 

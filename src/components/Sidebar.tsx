@@ -16,6 +16,7 @@ import type { AppView } from '../App';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Logo } from './Logo';
+import { platform, type BillingStatus } from '../platform';
 
 interface SidebarProps {
   activeView: AppView;
@@ -23,6 +24,7 @@ interface SidebarProps {
   collapsed: boolean;
   showToggle: boolean;
   onToggle: () => void;
+  billingStatus: BillingStatus | null;
 }
 
 const languages = [
@@ -31,10 +33,13 @@ const languages = [
   { id: 'es' as const, mark: 'ES', label: 'Español' },
 ];
 
-export default function Sidebar({ activeView, onViewChange, collapsed, showToggle, onToggle }: SidebarProps) {
+export default function Sidebar({ activeView, onViewChange, collapsed, showToggle, onToggle, billingStatus }: SidebarProps) {
   const { t, language, setLanguage } = useLanguage();
   const { user, logout, isAuthenticated, loginWithRedirect } = useAuth();
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isOpeningBilling, setIsOpeningBilling] = useState(false);
+  const [billingError, setBillingError] = useState('');
 
   const displayName = user?.name || user?.email || t('common', 'guest');
   const displayEmail = user?.email || '';
@@ -51,13 +56,80 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
     { id: 'billing' as const, icon: CreditCard, label: t('billing', 'eyebrow') },
   ];
 
-  const handleUpgrade = async () => {
+  const accountStatus = (() => {
+    if (!billingStatus) return null;
+
+    switch (billingStatus?.normalizedState) {
+      case 'trial_active':
+      case 'trialing':
+        return { label: t('sidebar', 'statusTrial'), tone: 'trial' };
+      case 'active':
+      case 'cancel_scheduled':
+        return { label: t('sidebar', 'statusPaid'), tone: 'paid' };
+      case 'trial_expired':
+        return { label: t('sidebar', 'statusExpired'), tone: 'expired' };
+      case 'past_due_grace':
+        return { label: t('billing', 'statePastDueGrace'), tone: 'attention' };
+      case 'past_due_blocked':
+        return { label: t('billing', 'statePastDueBlocked'), tone: 'attention' };
+      case 'incomplete':
+        return { label: t('billing', 'stateIncomplete'), tone: 'attention' };
+      case 'checkout_pending':
+        return { label: t('billing', 'stateCheckoutPending'), tone: 'attention' };
+      case 'paused':
+        return { label: t('billing', 'statePaused'), tone: 'attention' };
+      case 'reconciliation_required':
+        return { label: t('billing', 'stateReconciliationRequired'), tone: 'attention' };
+      case 'canceled':
+        return { label: t('billing', 'stateCanceled'), tone: 'expired' };
+      default:
+        return { label: t('sidebar', 'statusFree'), tone: 'free' };
+    }
+  })();
+
+  const showUpgrade = isAuthenticated && billingStatus !== null
+    && ['free', 'trial_active', 'trial_expired', 'canceled'].includes(billingStatus.normalizedState);
+
+  const handlePlanClick = () => {
     if (!isAuthenticated) {
       loginWithRedirect();
       return;
     }
 
     onViewChange('billing');
+  };
+
+  const handleBillingClick = async () => {
+    if (isOpeningBilling) return;
+    if (!billingStatus?.portalAvailable) {
+      onViewChange('billing');
+      return;
+    }
+
+    setBillingError('');
+    setIsOpeningBilling(true);
+    try {
+      const value = await platform.createBillingPortalSession();
+      if (!value.url) throw new Error(t('billing', 'portalUnavailable'));
+      await platform.openBillingUrl(value.url);
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : t('billing', 'portalOpenFailed'));
+    } finally {
+      setIsOpeningBilling(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (isSigningOut) return;
+    setBillingError('');
+    setIsSigningOut(true);
+    try {
+      await logout();
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : t('sidebar', 'signOutFailed'));
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
@@ -112,11 +184,11 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
       </nav>
 
       <footer className="sidebar-footer">
-        {isAuthenticated && (
+        {showUpgrade && (
           <button
             type="button"
             className="upgrade-card"
-            onClick={handleUpgrade}
+            onClick={handlePlanClick}
             aria-label={t('sidebar', 'upgrade')}
             title={collapsed ? t('sidebar', 'upgrade') : undefined}
           >
@@ -127,7 +199,6 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
                 <small>{t('sidebar', 'upgradeDescription')}</small>
               </span>
             )}
-            {!collapsed && <ChevronRight className="upgrade-chevron" />}
           </button>
         )}
 
@@ -143,40 +214,62 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
               <LogIn />
               {!collapsed && <span>{t('login', 'signIn')}</span>}
             </button>
-          ) : collapsed ? (
-            <button
-              type="button"
-              className="account-action"
-              onClick={() => logout()}
-              aria-label={t('sidebar', 'signOut')}
-              title={t('sidebar', 'signOut')}
-            >
-              <LogOut />
-            </button>
           ) : (
-            <div className="account-row">
-              {user?.image ? (
-                <img className="account-avatar" src={user.image} alt={displayName} />
-              ) : (
-                <span className="account-avatar account-initials">{initials}</span>
+            <>
+              <div
+                className="account-profile"
+                role="group"
+                aria-label={`${displayName}${accountStatus ? ` · ${accountStatus.label}` : ''}`}
+                title={collapsed ? `${displayName}${accountStatus ? ` · ${accountStatus.label}` : ''}` : undefined}
+              >
+                {user?.image ? (
+                  <img className="account-avatar" src={user.image} alt="" />
+                ) : (
+                  <span className="account-avatar account-initials" aria-hidden>{initials}</span>
+                )}
+                {!collapsed && (
+                  <span className="account-copy">
+                    <strong>{displayName}</strong>
+                    {displayEmail && displayEmail !== displayName && <small>{displayEmail}</small>}
+                  </span>
+                )}
+              </div>
+              {!collapsed && accountStatus && (
+                <div className="account-plan-summary">
+                  <span className={`account-status is-${accountStatus.tone}`}>
+                    <span aria-hidden />
+                    {accountStatus.label}
+                  </span>
+                  {billingStatus?.planLabel && <small>{billingStatus.planLabel}</small>}
+                </div>
               )}
-              {!collapsed && (
-                <span className="account-copy">
-                  <strong>{displayName}</strong>
-                  {displayEmail && <small>{displayEmail}</small>}
-                </span>
-              )}
-              {!collapsed && (
+              <button
+                type="button"
+                className="account-action account-plan-action"
+                onClick={handlePlanClick}
+                aria-label={t('billing', 'eyebrow')}
+                title={collapsed ? t('billing', 'eyebrow') : undefined}
+              >
+                <CreditCard />
+                {!collapsed && <span>{t('billing', 'eyebrow')}</span>}
+                {!collapsed && <ChevronRight />}
+              </button>
+              {billingStatus?.portalAvailable && (
                 <button
                   type="button"
-                  className="icon-button account-logout"
-                  onClick={() => logout()}
-                  aria-label={t('sidebar', 'signOut')}
+                  className="account-action account-billing-action"
+                  onClick={() => void handleBillingClick()}
+                  disabled={isOpeningBilling}
+                  aria-busy={isOpeningBilling}
+                  aria-label={t('billing', 'manageStripe')}
+                  title={collapsed ? t('billing', 'manageStripe') : undefined}
                 >
-                  <LogOut />
+                  <ArrowUpRight />
+                  {!collapsed && <span>{t('billing', 'manageStripe')}</span>}
                 </button>
               )}
-            </div>
+              {billingError && !collapsed && <p className="account-error" role="alert">{billingError}</p>}
+            </>
           )}
 
           <div className="language-control">
@@ -219,6 +312,21 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
               )}
             </AnimatePresence>
           </div>
+
+          {isAuthenticated && (
+            <button
+              type="button"
+              className="account-action account-signout"
+              onClick={() => void handleLogout()}
+              disabled={isSigningOut}
+              aria-busy={isSigningOut}
+              aria-label={t('sidebar', 'signOut')}
+              title={collapsed ? t('sidebar', 'signOut') : undefined}
+            >
+              <LogOut />
+              {!collapsed && <span>{t('sidebar', 'signOut')}</span>}
+            </button>
+          )}
         </div>
       </footer>
     </div>

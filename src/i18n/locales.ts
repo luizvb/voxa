@@ -3,7 +3,7 @@ export const locales = {
     common: {
       loading: 'Loading Voxa…', close: 'Close', cancel: 'Cancel', delete: 'Delete', retry: 'Try again',
       serviceUnavailable: 'The local service is unavailable.', guest: 'Guest',
-      transcriptionLanguage: 'Transcription language', english: 'English', portuguese: 'Portuguese', spanish: 'Spanish',
+      transcriptionLanguage: 'Conversation language', english: 'English', portuguese: 'Portuguese', spanish: 'Spanish',
     },
     navigation: {
       workspace: 'Workspace', library: 'Library', conversation: 'Conversation', newRecording: 'New recording',
@@ -11,8 +11,12 @@ export const locales = {
     },
     analysisModes: { interview: 'Interview', language: 'Language', meeting: 'Meeting' },
     sidebar: {
-      menu: 'Main navigation', upgrade: 'Upgrade', upgradeDescription: 'More minutes and AI reports',
-      signOut: 'Sign out', changeLanguage: 'Change language',
+      menu: 'Main navigation', upgrade: 'Explore Voxa Pro', upgradeDescription: 'Keep transcription and AI insights available',
+      keepPro: 'Keep Voxa Pro', trialActiveDescription: 'Continue after your trial', managePlan: 'Manage plan', managePlanDescription: 'Billing and subscription details',
+      updatePayment: 'Update payment', updatePaymentDescription: 'Payment needs attention', paymentPending: 'Payment confirmation', paymentPendingDescription: 'Check your latest status',
+      reviewBilling: 'Review billing', reviewBillingDescription: 'Check your access status',
+      statusTrial: 'Free trial', statusPaid: 'Paid', statusExpired: 'Trial expired', statusFree: 'Free',
+      signOut: 'Sign out', signOutFailed: 'Could not sign out. Try again.', changeLanguage: 'Change language',
     },
     billing: {
       eyebrow: 'Plan and billing', headerDescription: 'New accounts receive 7 days of Pro without a card. Continued access is managed securely in Stripe.', loading: 'Loading billing', loadFailed: 'Could not load billing.', loadFailedTitle: 'Billing could not be loaded', retry: 'Retry', opening: 'Opening…', manageStripe: 'Manage in Stripe', updatePayment: 'Update payment', checkoutUnavailable: 'Checkout is unavailable.', checkoutOpenFailed: 'Could not open Checkout.', portalUnavailable: 'Billing management is unavailable.', portalOpenFailed: 'Could not open billing management.', contentLockedTitle: 'Your trial has ended', contentLockedDetail: 'Subscribe to Voxa Pro to open recordings, transcripts and AI insights.', continueBrowsing: 'Keep browsing', viewPlans: 'View plans',
@@ -37,8 +41,8 @@ export const locales = {
       savingShortcut: 'Saving shortcut…', shortcutUpdated: 'Shortcut updated.', shortcutFailed: 'Could not update shortcut.',
       openingAudioSettings: 'Opening audio settings…', audioSettingsOpened: 'Microphone settings opened.',
       microphoneReady: 'Microphone is ready.', microphoneFailed: 'Microphone permission is not available.',
-      audioSettings: 'Audio settings', liveSession: 'Live session', newSession: 'New session', sessionTitle: 'Conversation title',
-      titlePlaceholder: 'Name this conversation', recordingDescription: 'Voxa is capturing microphone and system audio.',
+      audioSettings: 'Audio settings', liveSession: 'Live session', newSession: 'New session', sessionTitle: 'Session name',
+      titlePlaceholder: 'e.g. Product sync', recordingDescription: 'Voxa is capturing microphone and system audio.',
       idleDescription: 'Capture microphone and system audio in one reliable recording.', start: 'Start recording', pause: 'Pause', resume: 'Resume', stop: 'Stop and save',
       idleDescriptionWeb: 'Record directly from the computer microphone or include audio from a shared tab or screen.', recordingDescriptionMicrophone: 'Voxa is recording the computer microphone.', recordingDescriptionShared: 'Voxa is recording the shared audio and your microphone when available.',
       shortcut: 'Shortcut', signalMonitor: 'Audio signal', input: 'Input', micAndSystem: 'Mic + system', saveMode: 'Save mode', localFirst: 'Local first',
@@ -107,7 +111,7 @@ export const locales = {
     common: {
       loading: 'Carregando o Voxa…', close: 'Fechar', cancel: 'Cancelar', delete: 'Excluir', retry: 'Tentar novamente',
       serviceUnavailable: 'O serviço local está indisponível.', guest: 'Visitante',
-      transcriptionLanguage: 'Idioma da transcrição', english: 'Inglês', portuguese: 'Português', spanish: 'Espanhol',
+      transcriptionLanguage: 'Idioma da conversa', english: 'Inglês', portuguese: 'Português', spanish: 'Espanhol',
     },
     navigation: {
       workspace: 'Workspace', library: 'Biblioteca', conversation: 'Conversa', newRecording: 'Nova gravação',
@@ -115,8 +119,12 @@ export const locales = {
     },
     analysisModes: { interview: 'Entrevista', language: 'Idioma', meeting: 'Reunião' },
     sidebar: {
-      menu: 'Navegação principal', upgrade: 'Fazer upgrade', upgradeDescription: 'Mais minutos e relatórios de IA',
-      signOut: 'Sair', changeLanguage: 'Alterar idioma',
+      menu: 'Navegação principal', upgrade: 'Conhecer o Voxa Pro', upgradeDescription: 'Mantenha transcrições e insights de IA disponíveis',
+      keepPro: 'Manter Voxa Pro', trialActiveDescription: 'Continue após seu teste', managePlan: 'Gerenciar plano', managePlanDescription: 'Detalhes da cobrança e assinatura',
+      updatePayment: 'Atualizar pagamento', updatePaymentDescription: 'O pagamento precisa de atenção', paymentPending: 'Confirmação do pagamento', paymentPendingDescription: 'Confira o status mais recente',
+      reviewBilling: 'Revisar cobrança', reviewBillingDescription: 'Confira o estado do seu acesso',
+      statusTrial: 'Teste grátis', statusPaid: 'Pago', statusExpired: 'Teste vencido', statusFree: 'Gratuito',
+      signOut: 'Sair da conta', signOutFailed: 'Não foi possível sair. Tente novamente.', changeLanguage: 'Alterar idioma',
     },
     billing: {
       eyebrow: 'Plano e cobrança', headerDescription: 'Novas contas recebem 7 dias de Pro sem cartão. O acesso contínuo é gerenciado com segurança pelo Stripe.', loading: 'Carregando cobrança', loadFailed: 'Não foi possível carregar a cobrança.', loadFailedTitle: 'Não foi possível carregar a cobrança', retry: 'Tentar novamente', opening: 'Abrindo…', manageStripe: 'Gerenciar no Stripe', updatePayment: 'Atualizar pagamento', checkoutUnavailable: 'O checkout não está disponível.', checkoutOpenFailed: 'Não foi possível abrir o checkout.', portalUnavailable: 'O gerenciamento de cobrança não está disponível.', portalOpenFailed: 'Não foi possível abrir o gerenciamento de cobrança.', contentLockedTitle: 'Seu teste terminou', contentLockedDetail: 'Assine o Voxa Pro para abrir gravações, transcrições e insights de IA.', continueBrowsing: 'Continuar navegando', viewPlans: 'Ver planos',
@@ -141,8 +149,8 @@ export const locales = {
       savingShortcut: 'Salvando atalho…', shortcutUpdated: 'Atalho atualizado.', shortcutFailed: 'Não foi possível atualizar o atalho.',
       openingAudioSettings: 'Abrindo ajustes de áudio…', audioSettingsOpened: 'Ajustes do microfone abertos.',
       microphoneReady: 'Microfone pronto.', microphoneFailed: 'A permissão do microfone não está disponível.',
-      audioSettings: 'Ajustes de áudio', liveSession: 'Sessão ao vivo', newSession: 'Nova sessão', sessionTitle: 'Título da conversa',
-      titlePlaceholder: 'Nomeie esta conversa', recordingDescription: 'O Voxa está capturando microfone e áudio do sistema.',
+      audioSettings: 'Ajustes de áudio', liveSession: 'Sessão ao vivo', newSession: 'Nova sessão', sessionTitle: 'Nome da sessão',
+      titlePlaceholder: 'Ex.: Reunião de produto', recordingDescription: 'O Voxa está capturando microfone e áudio do sistema.',
       idleDescription: 'Capture microfone e áudio do sistema em uma gravação confiável.', start: 'Iniciar gravação', pause: 'Pausar', resume: 'Continuar', stop: 'Parar e salvar',
       idleDescriptionWeb: 'Grave direto pelo microfone do computador ou inclua o áudio de uma aba ou tela compartilhada.', recordingDescriptionMicrophone: 'O Voxa está gravando o microfone do computador.', recordingDescriptionShared: 'O Voxa está gravando o áudio compartilhado e seu microfone quando disponível.',
       shortcut: 'Atalho', signalMonitor: 'Sinal de áudio', input: 'Entrada', micAndSystem: 'Mic + sistema', saveMode: 'Modo de salvamento', localFirst: 'Local primeiro',
@@ -211,7 +219,7 @@ export const locales = {
     common: {
       loading: 'Cargando Voxa…', close: 'Cerrar', cancel: 'Cancelar', delete: 'Eliminar', retry: 'Intentar de nuevo',
       serviceUnavailable: 'El servicio local no está disponible.', guest: 'Invitado',
-      transcriptionLanguage: 'Idioma de transcripción', english: 'Inglés', portuguese: 'Portugués', spanish: 'Español',
+      transcriptionLanguage: 'Idioma de la conversación', english: 'Inglés', portuguese: 'Portugués', spanish: 'Español',
     },
     navigation: {
       workspace: 'Workspace', library: 'Biblioteca', conversation: 'Conversación', newRecording: 'Nueva grabación',
@@ -219,8 +227,12 @@ export const locales = {
     },
     analysisModes: { interview: 'Entrevista', language: 'Idioma', meeting: 'Reunión' },
     sidebar: {
-      menu: 'Navegación principal', upgrade: 'Mejorar plan', upgradeDescription: 'Más minutos e informes de IA',
-      signOut: 'Cerrar sesión', changeLanguage: 'Cambiar idioma',
+      menu: 'Navegación principal', upgrade: 'Conocer Voxa Pro', upgradeDescription: 'Mantén disponibles las transcripciones y los insights de IA',
+      keepPro: 'Mantener Voxa Pro', trialActiveDescription: 'Continúa después de tu prueba', managePlan: 'Gestionar plan', managePlanDescription: 'Detalles de facturación y suscripción',
+      updatePayment: 'Actualizar pago', updatePaymentDescription: 'El pago requiere atención', paymentPending: 'Confirmación del pago', paymentPendingDescription: 'Consulta el estado más reciente',
+      reviewBilling: 'Revisar facturación', reviewBillingDescription: 'Consulta el estado de tu acceso',
+      statusTrial: 'Prueba gratis', statusPaid: 'De pago', statusExpired: 'Prueba vencida', statusFree: 'Gratis',
+      signOut: 'Cerrar sesión', signOutFailed: 'No se pudo cerrar la sesión. Inténtalo de nuevo.', changeLanguage: 'Cambiar idioma',
     },
     billing: {
       eyebrow: 'Plan y facturación', headerDescription: 'Las cuentas nuevas reciben 7 días de Pro sin tarjeta. El acceso continuo se gestiona de forma segura en Stripe.', loading: 'Cargando facturación', loadFailed: 'No se pudo cargar la facturación.', loadFailedTitle: 'No se pudo cargar la facturación', retry: 'Intentar de nuevo', opening: 'Abriendo…', manageStripe: 'Gestionar en Stripe', updatePayment: 'Actualizar pago', checkoutUnavailable: 'El checkout no está disponible.', checkoutOpenFailed: 'No se pudo abrir el checkout.', portalUnavailable: 'La gestión de facturación no está disponible.', portalOpenFailed: 'No se pudo abrir la gestión de facturación.', contentLockedTitle: 'Tu prueba terminó', contentLockedDetail: 'Suscríbete a Voxa Pro para abrir grabaciones, transcripciones e insights de IA.', continueBrowsing: 'Seguir navegando', viewPlans: 'Ver planes',
@@ -245,8 +257,8 @@ export const locales = {
       savingShortcut: 'Guardando atajo…', shortcutUpdated: 'Atajo actualizado.', shortcutFailed: 'No se pudo actualizar el atajo.',
       openingAudioSettings: 'Abriendo ajustes de audio…', audioSettingsOpened: 'Ajustes del micrófono abiertos.',
       microphoneReady: 'Micrófono listo.', microphoneFailed: 'El permiso del micrófono no está disponible.',
-      audioSettings: 'Ajustes de audio', liveSession: 'Sesión en vivo', newSession: 'Nueva sesión', sessionTitle: 'Título de la conversación',
-      titlePlaceholder: 'Nombra esta conversación', recordingDescription: 'Voxa está capturando micrófono y audio del sistema.',
+      audioSettings: 'Ajustes de audio', liveSession: 'Sesión en vivo', newSession: 'Nueva sesión', sessionTitle: 'Nombre de la sesión',
+      titlePlaceholder: 'Ej.: Reunión de producto', recordingDescription: 'Voxa está capturando micrófono y audio del sistema.',
       idleDescription: 'Captura micrófono y audio del sistema en una grabación confiable.', start: 'Iniciar grabación', pause: 'Pausar', resume: 'Continuar', stop: 'Detener y guardar',
       idleDescriptionWeb: 'Graba directamente con el micrófono del ordenador o incluye el audio de una pestaña o pantalla compartida.', recordingDescriptionMicrophone: 'Voxa está grabando el micrófono del ordenador.', recordingDescriptionShared: 'Voxa está grabando el audio compartido y tu micrófono cuando está disponible.',
       shortcut: 'Atajo', signalMonitor: 'Señal de audio', input: 'Entrada', micAndSystem: 'Mic + sistema', saveMode: 'Modo de guardado', localFirst: 'Local primero',

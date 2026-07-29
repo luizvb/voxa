@@ -24,7 +24,7 @@ export function useRecorder() {
   const [reviewBlob, setReviewBlob] = useState<{ blob: Blob; durationMs: number; url: string } | null>(null);
   
   const [status, setStatus] = useState('Ready');
-  const [sessionName, setSessionName] = useState('Voxa Session');
+  const [sessionName, setSessionName] = useState('');
   const [captureMode, setCaptureMode] = useState<CaptureMode>(platform.capabilities.kind === 'electron' ? 'shared' : 'microphone');
   
   // Timer state
