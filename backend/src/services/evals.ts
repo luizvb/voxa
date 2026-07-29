@@ -26,7 +26,7 @@ Rules:
 - Owners, due dates, titles, counts, commitments and decisions require explicit support in the same cited transcript quote.
 - Judge recommendations separately from transcript facts. A useful coaching recommendation is allowed when clearly framed as a recommendation.
 - Interview preparation and practice questions are valid interview-mode coaching content and are not mode leakage.
-- Reward mode-specific depth: teacher usefulness for language, hiring usefulness for interview and execution clarity for meeting.
+- Reward mode-specific depth: teacher usefulness for language, evidence quality and human decision support for interview, and execution clarity for meeting.
 - Separate recurring failures from one-off variance and avoid overfitting prompt recommendations to a single case.
 - Return valid JSON matching the exact structure requested by each task.`;
 
@@ -120,7 +120,13 @@ function collectEvidence(value: unknown, output: Array<{ speaker?: string; quote
 }
 
 function claimItemsForMode(analysis: any, mode: AnalysisMode): any[] {
+  const executiveClaims = [
+    ...(analysis?.summary?.criticalFindings || []),
+    ...(analysis?.summary?.recommendedActions || []),
+    ...(analysis?.summary?.unansweredQuestions || [])
+  ];
   if (mode === 'interview') return [
+    ...executiveClaims,
     ...(analysis?.interview?.strengths || []),
     ...(analysis?.interview?.concerns || []),
     ...(analysis?.interview?.contradictions || []),
@@ -131,6 +137,7 @@ function claimItemsForMode(analysis: any, mode: AnalysisMode): any[] {
     ...(analysis?.interview?.coaching?.practiceQuestions || [])
   ];
   if (mode === 'language') return [
+    ...executiveClaims,
     ...(analysis?.languageClass?.learnerProfiles || []).flatMap((item: any) => [...(item.strengths || []), ...(item.priorities || [])]),
     ...(analysis?.languageClass?.languagePatterns || []),
     ...Object.values(analysis?.languageClass?.lessonProgress || {}).flatMap((items: any) => Array.isArray(items) ? items : []),
@@ -139,8 +146,11 @@ function claimItemsForMode(analysis: any, mode: AnalysisMode): any[] {
     ...(analysis?.languageClass?.teacherPlan?.homework || [])
   ];
   return [
+    ...executiveClaims,
     ...(analysis?.meeting?.topics || []),
     ...(analysis?.meeting?.participantViews || []),
+    ...(analysis?.meeting?.tensions || []),
+    ...(analysis?.meeting?.strategicImplications || []),
     ...(analysis?.meeting?.decisions || []),
     ...(analysis?.meeting?.proposals || []),
     ...(analysis?.meeting?.actionItems || []),
@@ -158,7 +168,7 @@ export function runDeterministicChecks(analysis: any, scenario: EvalScenario): D
   const expectedKeys = ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting'];
   const actualKeys = analysis && typeof analysis === 'object' ? Object.keys(analysis) : [];
   const schemaValid = expectedKeys.length === actualKeys.length && expectedKeys.every((key, index) => actualKeys[index] === key);
-  push('schema', 'Exact v4 analysis schema', schemaValid && analysis?.version === '4.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
+  push('schema', 'Exact v5 analysis schema', schemaValid && analysis?.version === '5.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
   const selectedExactly = Array.isArray(analysis?.analysisModes) && analysis.analysisModes.length === 1 && analysis.analysisModes[0] === scenario.mode;
   push('selected-mode', 'Selected mode is exact', selectedExactly, 'critical', `Expected only ${scenario.mode}.`);
   const modeObjects: Record<AnalysisMode, string> = { interview: 'interview', language: 'languageClass', meeting: 'meeting' };

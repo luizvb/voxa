@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import db from '../config/db';
 import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
-import { analyzeTranscriptWithOpenRouter, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
+import { analyzeTranscriptWithOpenRouter, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
   await db.query(`
@@ -429,7 +429,7 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
     
     const transcript = tRows[0];
     const apiKey = process.env.OPENROUTER_API_KEY || '';
-    const model = process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite';
+    const model = configuredAnalysisModel();
 
     const modes = normalizeAnalysisModes(req.body?.modes);
     let outputLanguage;

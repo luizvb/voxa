@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import db from '../config/db';
-import { DEFAULT_SYSTEM_PROMPT } from '../services/llm';
+import { DEFAULT_SYSTEM_PROMPT, configuredAnalysisModel } from '../services/llm';
 import { DEFAULT_EVAL_SUPERVISOR_PROMPT, buildEvalCsv, cancelRun, ensureEvalTables, improveRunPrompt, normalizeEvalConfig, processRun, promptSnapshot, retryCase } from '../services/evals';
 
 export async function createEvalRun(req: Request, res: Response) {
@@ -8,8 +8,8 @@ export async function createEvalRun(req: Request, res: Response) {
     await ensureEvalTables();
     await db.query("INSERT INTO users (id, email) VALUES ($1, 'unknown@voxa') ON CONFLICT (id) DO NOTHING", [req.user!.id]);
     const config = normalizeEvalConfig(req.body);
-    const insightModel = config.insightModel || process.env.OPENROUTER_MODEL || 'google/gemini-3.1-flash-lite';
-    const supervisorModel = config.supervisorModel || process.env.VOXA_EVAL_SUPERVISOR_MODEL || 'anthropic/claude-haiku-4.5';
+    const insightModel = config.insightModel || configuredAnalysisModel();
+    const supervisorModel = config.supervisorModel || process.env.VOXA_EVAL_SUPERVISOR_MODEL || 'anthropic/claude-sonnet-4.6';
     if (insightModel === supervisorModel) { res.status(400).json({ error: 'Insight and supervisor models must be different.' }); return; }
     const prompt = promptSnapshot(config);
     const { rows } = await db.query(`INSERT INTO eval_runs (user_id, config, insight_model, supervisor_model, prompt_hash, prompt_snapshot) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`, [req.user!.id, JSON.stringify(config), insightModel, supervisorModel, prompt.hash, prompt.snapshot]);

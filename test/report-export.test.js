@@ -39,22 +39,46 @@ test('report export escapes user and model-provided HTML', () => {
   assert.match(html, /&lt;img src=x&gt;/);
 });
 
-test('PDF report reads the structured v4 insight fields', () => {
+test('PDF report reads the structured v5 executive insight fields', () => {
   const html = buildAnalysisReportHtml({
     recording: { name: 'Structured review' },
     analysis: {
-      version: '4.0', analysisModes: ['interview', 'language', 'meeting'], evidenceQuality: { level: 'high' },
-      summary: { title: 'Review', purpose: { statement: 'Assess the conversation.' }, executiveBrief: { statement: 'A grounded executive brief.' }, keyPoints: [{ statement: 'A grounded key point.' }] },
-      interview: { executiveAssessment: { overallScore: 7, outcomeForecast: 'uncertain', rationale: 'Needs more evidence.' }, strengths: [{ signal: 'Clear ownership', demonstratedBy: 'Named the contribution.', hiringRelevance: 'Execution signal.', evidence: [] }], concerns: [], competencies: [], questionReviews: [], coaching: { priorities: [], candidateQuestions: [], practiceQuestions: [] } },
-      languageClass: { lessonContext: { objective: 'Practice updates.', learnerSpeakers: ['Alex'] }, learnerProfiles: [{ speaker: 'Alex', cefr: { level: 'B2' }, skills: { grammar: { score: 7 } }, strengths: [], priorities: [] }], corrections: [], lessonProgress: {}, teacherPlan: {} },
-      meeting: { executiveBrief: { outcome: 'A staged plan was selected.', whatChanged: [], needsDecision: [], needsEscalation: [] }, decisions: [], actionItems: [], proposals: [], risks: [], blockers: [], metrics: [], openQuestions: [], topics: [] }
+      version: '5.0',
+      analysisModes: ['interview', 'language', 'meeting'],
+      evidenceQuality: { level: 'high', limitations: [], missingInformation: ['Revenue baseline was not stated.'] },
+      summary: {
+        title: 'Review',
+        purpose: { statement: 'Assess the conversation.' },
+        executiveBrief: { statement: 'A grounded executive brief.' },
+        bottomLine: { statement: 'Execution is credible, but the commercial case remains incomplete.', evidence: [] },
+        criticalFindings: [{ finding: 'The rollout has an accountable owner.', significance: 'Execution risk is lower.', businessImpact: 'Faster delivery.', evidence: [] }],
+        recommendedActions: [{ action: 'Validate the revenue baseline.', rationale: 'The decision lacks an economic anchor.', expectedOutcome: 'A defensible investment decision.', evidence: [] }],
+        unansweredQuestions: [{ question: 'What is the baseline revenue?', whyItMatters: 'It constrains ROI.', evidence: [] }],
+        keyPoints: [{ statement: 'A grounded key point.' }]
+      },
+      interview: { executiveAssessment: { overallScore: 7, evidenceSignal: 'mixed', decisionReadiness: 'partial', keyTradeoff: 'Strong ownership, limited commercial evidence.', rationale: 'Needs more evidence.' }, strengths: [{ signal: 'Clear ownership', demonstratedBy: 'Named the contribution.', hiringRelevance: 'Execution signal.', evidence: [] }], concerns: [], competencies: [], questionReviews: [], coaching: { priorities: [], candidateQuestions: [], practiceQuestions: [] } },
+      languageClass: { lessonContext: { objective: 'Practice updates.', executiveBrief: 'The learner communicates decisions clearly.', learnerSpeakers: ['Alex'] }, learnerProfiles: [{ speaker: 'Alex', cefr: { level: 'B2' }, skills: { grammar: { score: 7 } }, strengths: [], priorities: [], highestLeverageChange: 'Use explicit business outcomes.' }], corrections: [], lessonProgress: {}, teacherPlan: {} },
+      meeting: { executiveBrief: { bottomLine: 'Proceed with a staged rollout.', outcome: 'A staged plan was selected.', whatChanged: [], needsDecision: [], needsEscalation: [], managementAttention: ['Confirm the revenue baseline.'] }, decisions: [], actionItems: [], proposals: [], risks: [], blockers: [], metrics: [], openQuestions: [], tensions: [{ topic: 'Speed versus evidence', positions: ['Launch now', 'Validate economics first'], implication: 'The schedule may move.', resolutionNeeded: 'Agree on a validation gate.', evidence: [] }], strategicImplications: [{ implication: 'The operating model becomes reusable.', whyItMatters: 'It lowers future launch cost.', timeHorizon: 'near_term', evidence: [] }], topics: [] }
     }
   });
   assert.match(html, /A grounded executive brief/);
+  assert.match(html, /Execution is credible/);
+  assert.match(html, /The rollout has an accountable owner/);
+  assert.match(html, /Validate the revenue baseline/);
+  assert.match(html, /What is the baseline revenue/);
+  assert.match(html, /Revenue baseline was not stated/);
   assert.match(html, /Assess the conversation/);
   assert.match(html, /A grounded key point/);
   assert.match(html, /Clear ownership/);
+  assert.match(html, /Strong ownership, limited commercial evidence/);
+  assert.match(html, /Decision readiness/);
+  assert.match(html, /partial/);
   assert.match(html, /Practice updates/);
+  assert.match(html, /The learner communicates decisions clearly/);
+  assert.match(html, /Use explicit business outcomes/);
   assert.match(html, /B2/);
   assert.match(html, /A staged plan was selected/);
+  assert.match(html, /Confirm the revenue baseline/);
+  assert.match(html, /Speed versus evidence/);
+  assert.match(html, /The operating model becomes reusable/);
 });

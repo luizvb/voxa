@@ -3,7 +3,7 @@ import AIAnalysis from './AIAnalysis';
 const evidence = (speaker: string, quote: string) => [{ speaker, quote }];
 
 const sample = {
-  version: '4.0',
+  version: '5.0',
   analysisModes: ['interview', 'language', 'meeting'],
   summary: {
     title: 'Product migration review',

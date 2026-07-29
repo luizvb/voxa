@@ -1,13 +1,21 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { ANALYSIS_CONTRACT_VERSION, buildAnalysisOutputContract, buildAnalysisPrompt, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, sanitizeAnalysisResult } = require('../dist/services/llm');
+const { ANALYSIS_CONTRACT_VERSION, DEFAULT_ANALYSIS_MODEL, buildAnalysisJsonSchema, buildAnalysisOutputContract, buildAnalysisPrompt, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, sanitizeAnalysisResult } = require('../dist/services/llm');
 const { completeJsonWithOpenRouter } = require('../dist/services/llm');
 
 test('analysis modes are validated, deduplicated and default to language', () => {
   assert.deepEqual(normalizeAnalysisModes(['meeting', 'interview', 'meeting', 'invalid']), ['meeting', 'interview']);
   assert.deepEqual(normalizeAnalysisModes([]), ['language']);
   assert.deepEqual(normalizeAnalysisModes('meeting'), ['language']);
+});
+
+test('frontier analysis model is the default while explicit configuration still wins', () => {
+  assert.equal(DEFAULT_ANALYSIS_MODEL, 'openai/gpt-5.4');
+  assert.equal(configuredAnalysisModel({}), 'openai/gpt-5.4');
+  assert.equal(configuredAnalysisModel({ OPENROUTER_MODEL: 'google/gemini-3.1-flash-lite' }), 'openai/gpt-5.4');
+  assert.equal(configuredAnalysisModel({ OPENROUTER_MODEL: 'legacy/model' }), 'legacy/model');
+  assert.equal(configuredAnalysisModel({ VOXA_ANALYSIS_MODEL: 'preferred/model', OPENROUTER_MODEL: 'legacy/model' }), 'preferred/model');
 });
 
 test('insight output language is limited to the three platform languages', () => {
@@ -59,7 +67,8 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /INTERVIEW LENS/);
   assert.match(prompt, /LANGUAGE LESSON LENS/);
   assert.match(prompt, /MEETING LENS/);
-  assert.match(prompt, /likely_advance\|uncertain\|likely_not_advance/);
+  assert.match(prompt, /strong\|mixed\|weak\|insufficient/);
+  assert.match(prompt, /decisionReadiness/);
   assert.match(prompt, /learnerProfiles/);
   assert.match(prompt, /questionReviews/);
   assert.match(prompt, /executiveBrief/);
@@ -72,17 +81,36 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /\*\*Speaker 0\*\* Hello/);
 });
 
-test('v4 output contract separates factual registers from recommendations', () => {
+test('v5 output contract adds executive decision support and separates factual registers from recommendations', () => {
   const contract = buildAnalysisOutputContract(['interview', 'meeting']);
-  assert.equal(ANALYSIS_CONTRACT_VERSION, '4.0');
+  assert.equal(ANALYSIS_CONTRACT_VERSION, '5.0');
   assert.deepEqual(Object.keys(contract), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
   assert.equal(contract.languageClass, null);
   assert.ok(contract.interview.context);
   assert.ok(contract.interview.executiveAssessment);
+  assert.ok(contract.summary.bottomLine);
+  assert.ok(contract.summary.criticalFindings);
+  assert.ok(contract.summary.recommendedActions);
   assert.ok(contract.interview.coaching);
   assert.ok(contract.meeting.executiveBrief);
   assert.ok(contract.meeting.actionItems);
+  assert.ok(contract.meeting.tensions);
+  assert.ok(contract.meeting.strategicImplications);
   assert.ok(contract.meeting.nextMeeting);
+});
+
+test('analysis JSON schema is strict, mode-specific and constrains scores', () => {
+  const schema = buildAnalysisJsonSchema(['meeting']);
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.required, ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
+  assert.deepEqual(schema.properties.interview, { type: 'null' });
+  assert.deepEqual(schema.properties.version.enum, ['5.0']);
+  assert.deepEqual(schema.properties.analysisModes.items.enum, ['meeting']);
+  assert.equal(schema.properties.analysisModes.minItems, 1);
+  assert.equal(schema.properties.analysisModes.maxItems, 1);
+  assert.equal(schema.properties.meeting.additionalProperties, false);
+  assert.deepEqual(schema.properties.meeting.properties.risks.items.properties.severity.enum, ['critical', 'high', 'medium', 'low']);
+  assert.equal(schema.properties.summary.properties.bottomLine.additionalProperties, false);
 });
 
 test('single analysis prompt excludes unselected instructions', () => {
@@ -132,7 +160,7 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   }, transcript, ['meeting']);
 
   assert.deepEqual(Object.keys(sanitized), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
-  assert.equal(sanitized.version, '4.0');
+  assert.equal(sanitized.version, '5.0');
   assert.deepEqual(sanitized.analysisModes, ['meeting']);
   assert.equal(sanitized.interview, null);
   assert.equal(sanitized.languageClass, null);
@@ -143,6 +171,20 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   assert.deepEqual(Object.keys(sanitized.meeting), Object.keys(buildAnalysisOutputContract(['meeting']).meeting));
   assert.equal(sanitized.evidenceQuality.level, 'low');
   assert.ok(sanitized.evidenceQuality.limitations.length >= 1);
+});
+
+test('analysis sanitizer preserves the numeric evidence dimension inside question reviews', () => {
+  const transcript = 'Interviewer: Tell me about the launch. Candidate: I led the staged rollout with three teams.';
+  const raw = buildAnalysisOutputContract(['interview']);
+  raw.interview.questionReviews[0] = {
+    ...raw.interview.questionReviews[0],
+    question: 'Tell me about the launch.',
+    answerSummary: 'The candidate described rollout ownership.',
+    dimensions: { relevance: 8, specificity: 8, structure: 7, evidence: 8, ownership: 9, impact: 6 },
+    evidence: [{ speaker: 'Candidate', quote: 'I led the staged rollout with three teams' }]
+  };
+  const sanitized = sanitizeAnalysisResult(raw, transcript, ['interview']);
+  assert.equal(sanitized.interview.questionReviews[0].dimensions.evidence, 8);
 });
 
 test('JSON completion parses fenced output and reports usage with mocked provider', async (t) => {
@@ -166,4 +208,42 @@ test('JSON completion extracts the first complete object when a provider appends
   });
   const result = await completeJsonWithOpenRouter({ apiKey: 'test', model: 'candidate', systemPrompt: 'system', userPrompt: 'user' });
   assert.deepEqual(result.data, { ok: true, text: 'brace } inside' });
+});
+
+test('JSON completion requires schema support, private-data routing and reasoning when requested', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  let requestBody;
+  global.fetch = async (_url, init) => {
+    requestBody = JSON.parse(init.body);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }], usage: { total_tokens: 10, cost: 0.001 } })
+    };
+  };
+  await completeJsonWithOpenRouter({
+    apiKey: 'test',
+    model: 'frontier',
+    systemPrompt: 'system',
+    userPrompt: 'user',
+    responseSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false },
+    reasoningEffort: 'medium'
+  });
+  assert.equal(requestBody.response_format.type, 'json_schema');
+  assert.equal(requestBody.response_format.json_schema.strict, true);
+  assert.deepEqual(requestBody.provider, { require_parameters: true, data_collection: 'deny' });
+  assert.deepEqual(requestBody.reasoning, { effort: 'medium', exclude: true });
+});
+
+test('JSON completion rejects truncated executive reports', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '{"partial":true}' } }] })
+  });
+  await assert.rejects(
+    completeJsonWithOpenRouter({ apiKey: 'test', model: 'frontier', systemPrompt: 'system', userPrompt: 'user' }),
+    /truncated/
+  );
 });

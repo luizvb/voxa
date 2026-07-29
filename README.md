@@ -113,7 +113,8 @@ supports editing and fingerprinting both the Voxa and supervisor system prompts 
 a dedicated modal, exporting one case
 or the merged run as CSV, and asking the supervisor for a consolidated diagnosis plus
 a complete replacement prompt after the suite finishes. Configure
-`VOXA_EVAL_SUPERVISOR_MODEL` with a model different from `OPENROUTER_MODEL`.
+`VOXA_EVAL_SUPERVISOR_MODEL` with a model different from
+`VOXA_ANALYSIS_MODEL` (or the legacy `OPENROUTER_MODEL` alias).
 
 The page is removed from production builds and `/api/internal/evals/*` is not mounted
 when `NODE_ENV=production`. Eval tables are initialized on first local use and are

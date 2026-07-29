@@ -2,6 +2,16 @@ const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const ANALYSIS_MODES = ['interview', 'language', 'meeting'] as const;
 export type AnalysisMode = typeof ANALYSIS_MODES[number];
+export const DEFAULT_ANALYSIS_MODEL = 'openai/gpt-5.4';
+export const DEFAULT_ANALYSIS_REASONING_EFFORT = 'medium';
+
+export function configuredAnalysisModel(env: NodeJS.ProcessEnv = process.env): string {
+  const explicitModel = String(env.VOXA_ANALYSIS_MODEL || '').trim();
+  if (explicitModel) return explicitModel;
+  const legacyModel = String(env.OPENROUTER_MODEL || '').trim();
+  if (!legacyModel || legacyModel === 'google/gemini-3.1-flash-lite') return DEFAULT_ANALYSIS_MODEL;
+  return legacyModel;
+}
 
 export const DEFAULT_SYSTEM_PROMPT = `You are Voxa, a rigorous specialist who turns conversation transcripts into decision-ready reports.
 
@@ -18,6 +28,9 @@ NON-NEGOTIABLE RULES
 10. Produce only the requested modes. Keep the fixed top-level schema, set every unselected mode object to null, and never place language analysis inside interview or meeting output.
 11. Return one valid JSON object only. No markdown, code fences, commentary, extra keys or trailing text.
 12. evidenceQuality.limitations describes source limitations only, such as missing audio, short sample, unclear speaker labels or absent role criteria. Never place performance judgments or participant criticism in limitations.
+13. Write for a time-constrained executive: lead with the bottom line, distinguish material from incidental information, expose trade-offs and uncertainty, and explain why each critical finding matters.
+14. Completeness means covering every decision-relevant theme, disagreement, risk, commitment and unresolved question supported by the transcript. It does not mean padding, repetition or invented detail.
+15. Recommendations must be traceable to observed evidence, name the intended outcome, and remain clearly separate from transcript facts.
 
 FINAL PREFLIGHT BEFORE RETURNING JSON
 - fixed top-level keys only;
@@ -68,6 +81,8 @@ export interface JsonCompletionResult<T = any> {
   usage: LLMUsage;
 }
 
+type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 function firstJsonObject(content: string): string {
   const start = content.indexOf('{');
   if (start < 0) return content;
@@ -98,8 +113,22 @@ export async function completeJsonWithOpenRouter<T = any>(input: {
   systemPrompt: string;
   userPrompt: string;
   maxTokens?: number;
+  responseSchema?: Record<string, any>;
+  reasoningEffort?: ReasoningEffort;
+  temperature?: number;
+  dataCollection?: 'allow' | 'deny';
 }): Promise<JsonCompletionResult<T>> {
   if (!input.apiKey) throw new Error('Missing OPENROUTER_API_KEY in .env file.');
+  const responseFormat = input.responseSchema
+    ? {
+        type: 'json_schema',
+        json_schema: {
+          name: 'voxa_executive_analysis',
+          strict: true,
+          schema: input.responseSchema
+        }
+      }
+    : { type: 'json_object' };
   const response = await fetch(OPENROUTER_ENDPOINT, {
     method: 'POST',
     headers: { Authorization: `Bearer ${input.apiKey}`, 'Content-Type': 'application/json' },
@@ -110,11 +139,22 @@ export async function completeJsonWithOpenRouter<T = any>(input: {
         { role: 'user', content: input.userPrompt }
       ],
       max_tokens: input.maxTokens || 10000,
-      response_format: { type: 'json_object' }
+      response_format: responseFormat,
+      provider: {
+        require_parameters: Boolean(input.responseSchema),
+        data_collection: input.dataCollection || 'deny'
+      },
+      ...(input.reasoningEffort && input.reasoningEffort !== 'none'
+        ? { reasoning: { effort: input.reasoningEffort, exclude: true } }
+        : {}),
+      ...(typeof input.temperature === 'number' ? { temperature: input.temperature } : {})
     })
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.error) throw new Error(`OpenRouter AI failed: ${body.error?.message || response.statusText}`);
+  if (body.choices?.[0]?.finish_reason === 'length') {
+    throw new Error('OpenRouter AI response was truncated before the executive report was complete.');
+  }
   let content = String(body.choices?.[0]?.message?.content || '{}').trim();
   if (content.startsWith('```json')) content = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
   else if (content.startsWith('```')) content = content.replace(/^```\s*/, '').replace(/\s*```$/, '');
@@ -188,7 +228,7 @@ export function normalizeSelectedSpeakers(value: unknown, transcriptText: string
 
 const evidenceExample = { speaker: '', quote: 'exact consecutive transcript quote' };
 
-export const ANALYSIS_CONTRACT_VERSION = '4.0';
+export const ANALYSIS_CONTRACT_VERSION = '5.0';
 
 export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<string, any> {
   const selected = (mode: AnalysisMode, value: Record<string, any>) => modes.includes(mode) ? value : null;
@@ -200,15 +240,25 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
     summary: {
       title: 'short factual title',
       purpose: { statement: 'explicit purpose or not determinable', evidence: evidence() },
-      executiveBrief: { statement: '2-4 sentence factual synthesis', evidence: evidence() },
+      executiveBrief: { statement: '3-5 sentence decision-ready synthesis', evidence: evidence() },
+      bottomLine: { statement: 'single most important executive conclusion', confidence: 'high|medium|low', evidence: evidence() },
       keyPoints: [{ statement: '', category: 'fact|decision|risk|learning|coaching', evidence: evidence() }],
+      criticalFindings: [{
+        finding: '', significance: '', businessImpact: '', confidence: 'high|medium|low', evidence: evidence()
+      }],
+      recommendedActions: [{
+        action: '', priority: 'immediate|near_term|monitor', rationale: '', expectedOutcome: '', evidence: evidence()
+      }],
+      unansweredQuestions: [{ question: '', whyItMatters: '', evidence: evidence() }],
       language: 'output language'
     },
     evidenceQuality: {
       level: 'high|medium|low',
       coverage: { speakerLabels: 'clear|partial|unclear', substantiveTurns: null, selectedModeFit: 'high|medium|low' },
+      confidenceRationale: '',
       reasons: [],
-      limitations: []
+      limitations: [],
+      missingInformation: []
     },
     interview: selected('interview', {
       context: {
@@ -223,15 +273,17 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
       executiveAssessment: {
         overallScore: null,
         scoreConfidence: 'high|medium|low',
-        outcomeForecast: 'likely_advance|uncertain|likely_not_advance',
+        evidenceSignal: 'strong|mixed|weak|insufficient',
+        decisionReadiness: 'sufficient|partial|insufficient',
         rationale: '',
+        keyTradeoff: '',
         evidence: evidence(),
         caveat: ''
       },
       strengths: [{ signal: '', demonstratedBy: '', hiringRelevance: '', evidence: evidence() }],
-      concerns: [{ signal: '', severity: 'high|medium|low', observedIssue: '', missingProof: '', verificationQuestion: '', evidence: evidence() }],
+      concerns: [{ signal: '', severity: 'high|medium|low', observedIssue: '', decisionImpact: '', missingProof: '', verificationQuestion: '', evidence: evidence() }],
       contradictions: [{ topic: '', firstStatement: '', secondStatement: '', whyItMatters: '', verificationQuestion: '', evidence: evidence() }],
-      competencies: [{ name: '', score: null, confidence: 'high|medium|low', demonstrated: '', missing: '', evidence: evidence() }],
+      competencies: [{ name: '', importance: 'critical|important|supporting|unknown', score: null, confidence: 'high|medium|low', demonstrated: '', missing: '', evidence: evidence() }],
       questionReviews: [{
         question: '', askedBy: null, answeredBy: null, answerSummary: '', score: null,
         dimensions: { relevance: null, specificity: null, structure: null, evidence: null, ownership: null, impact: null },
@@ -245,13 +297,14 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
     }),
     languageClass: selected('language', {
       lessonContext: {
-        objective: '', targetLanguage: '', learnerSpeakers: [], teacherSpeakers: [], topics: [], evidence: evidence()
+        objective: '', executiveBrief: '', targetLanguage: '', learnerSpeakers: [], teacherSpeakers: [], topics: [], evidence: evidence()
       },
       learnerProfiles: [{
         speaker: '',
         cefr: { level: 'A1|A2|B1|B2|C1|C2|unknown', confidence: 'high|medium|low', rationale: '' },
         evidenceSufficiency: 'high|medium|low',
         overallAssessment: '',
+        highestLeverageChange: '',
         skills: {
           grammar: skill(), vocabulary: skill(), fluency: skill(), coherence: skill(), interaction: skill(), intelligibility: skill()
         },
@@ -275,20 +328,76 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
     }),
     meeting: selected('meeting', {
       meetingContext: { purpose: '', participants: [], topics: [], evidence: evidence() },
-      executiveBrief: { outcome: '', whatChanged: [], needsDecision: [], needsEscalation: [], evidence: evidence() },
-      decisions: [{ decision: '', impact: '', rationale: '', owner: null, evidence: evidence() }],
-      actionItems: [{ task: '', owner: null, dueDate: null, status: 'open', dependency: null, evidence: evidence() }],
+      executiveBrief: { outcome: '', bottomLine: '', whatChanged: [], needsDecision: [], needsEscalation: [], managementAttention: [], evidence: evidence() },
+      decisions: [{ decision: '', impact: '', rationale: '', tradeoffs: '', confidence: 'high|medium|low', owner: null, evidence: evidence() }],
+      actionItems: [{ task: '', owner: null, dueDate: null, priority: 'high|medium|low|unknown', status: 'open', dependency: null, expectedOutcome: '', evidence: evidence() }],
       proposals: [{ proposal: '', proposedBy: null, status: 'open|accepted|rejected|deferred', implication: '', evidence: evidence() }],
-      risks: [{ risk: '', basis: 'explicit|inferred', likelihood: 'high|medium|low|unknown', impact: '', mitigation: '', evidence: evidence() }],
+      risks: [{ risk: '', basis: 'explicit|inferred', severity: 'critical|high|medium|low', likelihood: 'high|medium|low|unknown', impact: '', trigger: '', mitigation: '', evidence: evidence() }],
       blockers: [{ blocker: '', owner: null, consequence: '', evidence: evidence() }],
       dependencies: [{ dependency: '', status: 'ready|at_risk|blocked|unknown', owner: null, evidence: evidence() }],
       participantViews: [{ speaker: '', position: '', commitments: [], concerns: [], evidence: evidence() }],
+      tensions: [{ topic: '', positions: [], implication: '', resolutionNeeded: '', evidence: evidence() }],
+      strategicImplications: [{ implication: '', timeHorizon: 'now|near_term|long_term|unknown', whyItMatters: '', evidence: evidence() }],
       metrics: [{ metric: '', value: '', context: '', evidence: evidence() }],
       openQuestions: [{ question: '', owner: null, whyItMatters: '', evidence: evidence() }],
       topics: [{ topic: '', status: 'resolved|open|deferred', summary: '', evidence: evidence() }],
       nextMeeting: { recommended: false, objective: '', timing: null, participants: [], agenda: [], rationale: '' }
     })
   };
+}
+
+const SCORE_OR_NULL_FIELDS = new Set([
+  'score', 'overallScore',
+  'grammar', 'vocabulary', 'fluency', 'coherence', 'interaction',
+  'intelligibility', 'relevance', 'specificity', 'structure',
+  'evidence', 'ownership', 'impact'
+]);
+const COUNT_OR_NULL_FIELDS = new Set(['substantiveTurns', 'durationMinutes']);
+
+function schemaForContract(template: any, path: string[] = []): Record<string, any> {
+  const key = path[path.length - 1] || '';
+  if (template === null) {
+    if (path.length === 1 && ['interview', 'languageClass', 'meeting'].includes(key)) return { type: 'null' };
+    if (SCORE_OR_NULL_FIELDS.has(key)) return { type: ['number', 'null'], minimum: 0, maximum: 10 };
+    if (COUNT_OR_NULL_FIELDS.has(key)) return { type: ['number', 'null'], minimum: 0 };
+    return { type: ['string', 'null'] };
+  }
+  if (Array.isArray(template)) {
+    return {
+      type: 'array',
+      items: template.length ? schemaForContract(template[0], [...path, '[]']) : { type: 'string' }
+    };
+  }
+  if (template && typeof template === 'object') {
+    const properties = Object.fromEntries(
+      Object.entries(template).map(([childKey, value]) => [childKey, schemaForContract(value, [...path, childKey])])
+    );
+    return {
+      type: 'object',
+      properties,
+      required: Object.keys(properties),
+      additionalProperties: false
+    };
+  }
+  if (typeof template === 'boolean') return { type: 'boolean' };
+  if (typeof template === 'number') return { type: 'number' };
+  if (key === 'version') return { type: 'string', enum: [ANALYSIS_CONTRACT_VERSION] };
+  if (key === 'language' && path.includes('summary')) return { type: 'string', enum: [...ANALYSIS_OUTPUT_LANGUAGES] };
+  if (typeof template === 'string' && /^[a-z0-9_]+(?:\|[a-z0-9_]+)+$/i.test(template)) {
+    return { type: 'string', enum: template.split('|') };
+  }
+  return { type: 'string' };
+}
+
+export function buildAnalysisJsonSchema(modes: AnalysisMode[]): Record<string, any> {
+  const schema = schemaForContract(buildAnalysisOutputContract(modes));
+  schema.properties.analysisModes = {
+    type: 'array',
+    items: { type: 'string', enum: modes },
+    minItems: modes.length,
+    maxItems: modes.length
+  };
+  return schema;
 }
 
 export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOptions = {}): string {
@@ -307,7 +416,8 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 - For contradictions, preserve both conflicting exact quotes, explain why the conflict matters and state what a follow-up must verify. Do not resolve the contradiction on the candidate's behalf.
 - When the transcript contains at least two substantive candidate answers, provide calibrated question, competency and overall scores. Use low scoreConfidence when role criteria are missing. Use null only when the sample is too sparse to score responsibly.
 - Score answer quality and demonstrated evidence, not presumed honesty or character. A contradiction lowers clarity, consistency and evidence quality; it does not prove deception.
-- The forecast is directional coaching, never a hiring decision. Use uncertain when role criteria or evidence are incomplete. Use likely_not_advance only when explicit role requirements are present and the transcript directly shows a material unmet requirement.
+- evidenceSignal summarizes the strength of observed role-relevant evidence; it is never an autonomous hiring recommendation. decisionReadiness must be insufficient when role criteria or material evidence are missing.
+- Make the central trade-off explicit: what the transcript supports, what it does not support, and which missing proof could materially change a human review.
 - Preparation questions and practice items are part of interview coaching, not another analysis mode. Tie each recommendation to an observed gap, but do not present the recommendation as a transcript fact.`,
     language: `LANGUAGE LESSON LENS - think like a skilled language teacher planning the learner's next lesson.
 - Identify learner and teacher by conversational function only when supported; otherwise use unknown.
@@ -322,6 +432,8 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 - Separate confirmed decisions, proposals and unresolved questions. Never convert a suggestion into a decision.
 - Action items require explicit commitment evidence. Owner and dueDate must be null unless that same evidence explicitly assigns them.
 - Summarize what changed, what needs a decision, what needs escalation, dependencies, blockers, metrics and participant positions.
+- Identify material tensions, trade-offs and strategic implications. Do not flatten dissent into false alignment.
+- Rank risks and actions by materiality. Explain the consequence of inaction and the management attention required.
 - Risks may be explicit or inferred. Inferred risks must be labeled inferred, use cautious wording and cite the exact transcript basis.
 - The next-meeting block is a recommendation, not meeting metadata. Never invent a calendar date, participant or commitment.`
   };
@@ -347,10 +459,13 @@ ${JSON.stringify(evidenceExample)}
 STRUCTURE AND DEPTH RULES
 - Return exactly the seven top-level keys in the JSON contract, in the same order. Set every unselected mode to null.
 - Keep facts, evaluation and recommendations in their named sections. Do not repeat the same insight in multiple sections.
+- First inspect the whole transcript for decision-relevant themes, changes, commitments, dissent, contradictions, risks, metrics and unresolved questions. Then synthesize; do not stop after the opening or most recent topic.
 - Populate every applicable section with specific detail. Empty arrays are correct when evidence is absent; generic filler is not.
 - Each item must answer what happened, why it matters and what should happen next when those fields exist.
-- Prefer 3-6 high-value items per major array and up to 8 substantive question reviews. Do not sacrifice evidence quality to fill a quota.
-- Recommendations belong only in coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
+- Prefer 4-8 high-value items per major array for substantive transcripts and up to 10 substantive question reviews. Use fewer when the source is short. Do not sacrifice evidence quality to fill a quota.
+- summary.bottomLine must state the single most decision-relevant conclusion. criticalFindings must explain significance and business impact. recommendedActions must name an expected outcome and cite the evidence that makes the action relevant.
+- Explicitly surface important missing information and unanswered questions that constrain confidence. Never hide uncertainty behind polished language.
+- Recommendations belong only in summary.recommendedActions, coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
 - Use null for unknown scalar values. Never replace missing structured fields with prose blobs.
 
 EXACT OUTPUT CONTRACT
@@ -406,7 +521,9 @@ function sanitizeNode(value: any, transcriptText: string, stats: { removedEviden
   if (value && typeof value === 'object') {
     const output: Record<string, any> = {};
     for (const [childKey, child] of Object.entries(value)) {
-      if (childKey === 'evidence') output[childKey] = sanitizeEvidence(child, transcriptText, stats);
+      if (childKey === 'evidence' && (Array.isArray(child) || typeof child === 'string' || (child && typeof child === 'object'))) {
+        output[childKey] = sanitizeEvidence(child, transcriptText, stats);
+      }
       else output[childKey] = sanitizeNode(child, transcriptText, stats, childKey);
     }
     return output;
@@ -479,7 +596,8 @@ function sanitizeInterview(value: any, stats: { removedClaims: number }): any {
   }
   if (!Array.isArray(value.executiveAssessment?.evidence) || !value.executiveAssessment.evidence.length) {
     value.executiveAssessment.overallScore = null;
-    value.executiveAssessment.outcomeForecast = 'uncertain';
+    value.executiveAssessment.evidenceSignal = 'insufficient';
+    value.executiveAssessment.decisionReadiness = 'insufficient';
   }
   return value;
 }
@@ -525,8 +643,8 @@ function sanitizeLanguage(value: any, transcriptText: string, stats: { removedCl
 function sanitizeMeeting(value: any, stats: { removedClaims: number; clearedOwners: number }): any {
   if (!value || typeof value !== 'object') return null;
   clearUngroundedFields(value.meetingContext, ['purpose', 'participants', 'topics'], stats);
-  clearUngroundedFields(value.executiveBrief, ['outcome', 'whatChanged', 'needsDecision', 'needsEscalation'], stats);
-  for (const key of ['topics', 'participantViews', 'decisions', 'proposals', 'actionItems', 'risks', 'blockers', 'dependencies', 'metrics', 'openQuestions']) {
+  clearUngroundedFields(value.executiveBrief, ['outcome', 'bottomLine', 'whatChanged', 'needsDecision', 'needsEscalation', 'managementAttention'], stats);
+  for (const key of ['topics', 'participantViews', 'tensions', 'strategicImplications', 'decisions', 'proposals', 'actionItems', 'risks', 'blockers', 'dependencies', 'metrics', 'openQuestions']) {
     if (key in value) value[key] = keepGrounded(value[key], stats);
   }
   for (const key of ['decisions', 'actionItems', 'blockers', 'dependencies', 'openQuestions']) {
@@ -567,11 +685,16 @@ export function sanitizeAnalysisResult(raw: any, transcriptText: string, request
   }
   clearUngroundedFields(sanitized.summary?.purpose, ['statement'], stats);
   clearUngroundedFields(sanitized.summary?.executiveBrief, ['statement'], stats);
+  clearUngroundedFields(sanitized.summary?.bottomLine, ['statement'], stats);
   const summary = {
     title: String(sanitized.summary?.title || ''),
     purpose: sanitized.summary?.purpose || { statement: '', evidence: [] },
     executiveBrief: sanitized.summary?.executiveBrief || { statement: '', evidence: [] },
+    bottomLine: sanitized.summary?.bottomLine || { statement: '', confidence: 'low', evidence: [] },
     keyPoints: keepGrounded(sanitized.summary?.keyPoints, stats),
+    criticalFindings: keepGrounded(sanitized.summary?.criticalFindings, stats),
+    recommendedActions: keepGrounded(sanitized.summary?.recommendedActions, stats),
+    unansweredQuestions: keepGrounded(sanitized.summary?.unansweredQuestions, stats),
     language: String(sanitized.summary?.language || '')
   };
   const evidenceQuality = sanitized.evidenceQuality && typeof sanitized.evidenceQuality === 'object'
@@ -604,13 +727,16 @@ function asSelectedSpeakerItems(value: unknown, key: string, selectedKeys: Set<s
 export async function analyzeTranscriptWithOpenRouter(
   apiKey: string,
   transcriptText: string,
-  model: string = 'google/gemini-3.1-flash-lite',
+  model: string = DEFAULT_ANALYSIS_MODEL,
   options: AnalyzeOptions = {}
 ): Promise<AnalysisResult> {
   const modes = normalizeAnalysisModes(options.modes);
   const result = await completeJsonWithOpenRouter({
     apiKey,
     model,
+    maxTokens: 20000,
+    responseSchema: buildAnalysisJsonSchema(modes),
+    reasoningEffort: DEFAULT_ANALYSIS_REASONING_EFFORT,
     systemPrompt: options.systemPrompt || process.env.VOXA_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT,
     userPrompt: buildAnalysisPrompt(transcriptText, { ...options, modes })
   });

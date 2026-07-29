@@ -9,37 +9,37 @@ const COPY: Record<Language, Record<string, string>> = {
   en: {
     report: 'Verified conversation report', recorded: 'Recorded', generated: 'Generated', page: 'Page', of: 'of',
     evidenceQuality: 'Evidence quality', analysisModes: 'Analysis lenses', keyPoints: 'Key points', version: 'Report version',
-    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive brief', transcriptEvidence: 'Transcript evidence',
+    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive brief', transcriptEvidence: 'Transcript evidence', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', recommendedActions: 'Recommended actions', unansweredQuestions: 'Questions that constrain the decision', missingInformation: 'Missing information',
     interview: 'Interview analysis', languageClass: 'Language lesson analysis', meeting: 'Meeting analysis', lens: 'Analysis lens',
     verify: 'AI-generated analysis should be checked against the transcript. Recommendations are guidance, not transcript facts.',
-    context: 'Context', executiveAssessment: 'Executive assessment', overallScore: 'Overall score', scoreConfidence: 'Score confidence', outcomeForecast: 'Directional forecast', rationale: 'Rationale', caveat: 'Caveat',
+    context: 'Context', executiveAssessment: 'Executive assessment', overallScore: 'Overall score', scoreConfidence: 'Score confidence', outcomeForecast: 'Directional forecast', evidenceSignal: 'Strength of observed evidence', decisionReadiness: 'Decision readiness', keyTradeoff: 'Key trade-off', rationale: 'Rationale', caveat: 'Caveat',
     strengths: 'Strongest evidence', concerns: 'Material concerns', contradictions: 'Contradictions', competencies: 'Competencies', questionReviews: 'Question-by-question review', coaching: 'Coaching plan', priorities: 'Priorities', candidateQuestions: 'Candidate questions', practiceQuestions: 'Practice questions',
     lessonContext: 'Lesson context', objective: 'Objective', targetLanguage: 'Target language', learnerSpeakers: 'Learners', teacherSpeakers: 'Teachers', topics: 'Topics', learnerProfiles: 'Learner profiles', cefr: 'CEFR', skills: 'Skills', languagePatterns: 'Language patterns', corrections: 'Priority corrections', lessonProgress: 'Lesson progress', teacherPlan: 'Next lesson plan', homework: 'Homework',
-    meetingContext: 'Meeting context', executiveBrief: 'Manager brief', decisions: 'Confirmed decisions', actionItems: 'Explicit action items', proposals: 'Proposals', risks: 'Risks', blockers: 'Blockers', dependencies: 'Dependencies', participantViews: 'Participant views', metrics: 'Metrics', openQuestions: 'Open questions', nextMeeting: 'Recommended next meeting',
+    meetingContext: 'Meeting context', executiveBrief: 'Manager brief', decisions: 'Confirmed decisions', actionItems: 'Explicit action items', proposals: 'Proposals', risks: 'Risks', blockers: 'Blockers', dependencies: 'Dependencies', participantViews: 'Participant views', tensions: 'Tensions and trade-offs', strategicImplications: 'Strategic implications', metrics: 'Metrics', openQuestions: 'Open questions', nextMeeting: 'Recommended next meeting',
     statement: 'Statement', evidence: 'Evidence', speaker: 'Speaker', quote: 'Quote', level: 'Level', reasons: 'Reasons', coverage: 'Coverage', title: 'Title', language: 'Language',
   },
   pt: {
     report: 'Relatório verificado da conversa', recorded: 'Gravado em', generated: 'Gerado em', page: 'Página', of: 'de',
     evidenceQuality: 'Qualidade das evidências', analysisModes: 'Perspectivas de análise', keyPoints: 'Pontos principais', version: 'Versão do relatório',
-    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', transcriptEvidence: 'Evidência da transcrição',
+    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', transcriptEvidence: 'Evidência da transcrição', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', recommendedActions: 'Ações recomendadas', unansweredQuestions: 'Perguntas que limitam a decisão', missingInformation: 'Informações ausentes',
     interview: 'Análise de entrevista', languageClass: 'Análise da aula de idioma', meeting: 'Análise da reunião', lens: 'Perspectiva de análise',
     verify: 'A análise gerada por IA deve ser conferida na transcrição. Recomendações são orientações, não fatos da conversa.',
-    context: 'Contexto', executiveAssessment: 'Avaliação executiva', overallScore: 'Nota geral', scoreConfidence: 'Confiança da nota', outcomeForecast: 'Expectativa direcional', rationale: 'Justificativa', caveat: 'Ressalva',
+    context: 'Contexto', executiveAssessment: 'Avaliação executiva', overallScore: 'Nota geral', scoreConfidence: 'Confiança da nota', outcomeForecast: 'Expectativa direcional', evidenceSignal: 'Força das evidências observadas', decisionReadiness: 'Prontidão para decisão', keyTradeoff: 'Trade-off central', rationale: 'Justificativa', caveat: 'Ressalva',
     strengths: 'Evidências mais fortes', concerns: 'Pontos de atenção', contradictions: 'Contradições', competencies: 'Competências', questionReviews: 'Análise pergunta a pergunta', coaching: 'Plano de preparação', priorities: 'Prioridades', candidateQuestions: 'Perguntas do candidato', practiceQuestions: 'Perguntas para prática',
     lessonContext: 'Contexto da aula', objective: 'Objetivo', targetLanguage: 'Idioma-alvo', learnerSpeakers: 'Alunos', teacherSpeakers: 'Professores', topics: 'Tópicos', learnerProfiles: 'Perfis dos alunos', cefr: 'CEFR', skills: 'Habilidades', languagePatterns: 'Padrões de linguagem', corrections: 'Correções prioritárias', lessonProgress: 'Progresso da aula', teacherPlan: 'Plano da próxima aula', homework: 'Tarefa de casa',
-    meetingContext: 'Contexto da reunião', executiveBrief: 'Briefing do gerente', decisions: 'Decisões confirmadas', actionItems: 'Pontos de ação explícitos', proposals: 'Propostas', risks: 'Riscos', blockers: 'Bloqueios', dependencies: 'Dependências', participantViews: 'Visões dos participantes', metrics: 'Métricas', openQuestions: 'Perguntas em aberto', nextMeeting: 'Próxima reunião recomendada',
+    meetingContext: 'Contexto da reunião', executiveBrief: 'Briefing do gerente', decisions: 'Decisões confirmadas', actionItems: 'Pontos de ação explícitos', proposals: 'Propostas', risks: 'Riscos', blockers: 'Bloqueios', dependencies: 'Dependências', participantViews: 'Visões dos participantes', tensions: 'Tensões e trade-offs', strategicImplications: 'Implicações estratégicas', metrics: 'Métricas', openQuestions: 'Perguntas em aberto', nextMeeting: 'Próxima reunião recomendada',
     statement: 'Síntese', evidence: 'Evidência', speaker: 'Participante', quote: 'Trecho', level: 'Nível', reasons: 'Motivos', coverage: 'Cobertura', title: 'Título', language: 'Idioma',
   },
   es: {
     report: 'Informe verificado de la conversación', recorded: 'Grabado', generated: 'Generado', page: 'Página', of: 'de',
     evidenceQuality: 'Calidad de la evidencia', analysisModes: 'Perspectivas de análisis', keyPoints: 'Puntos principales', version: 'Versión del informe',
-    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', transcriptEvidence: 'Evidencia de la transcripción',
+    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', transcriptEvidence: 'Evidencia de la transcripción', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', recommendedActions: 'Acciones recomendadas', unansweredQuestions: 'Preguntas que limitan la decisión', missingInformation: 'Información ausente',
     interview: 'Análisis de entrevista', languageClass: 'Análisis de la clase de idioma', meeting: 'Análisis de la reunión', lens: 'Perspectiva de análisis',
     verify: 'El análisis generado por IA debe verificarse con la transcripción. Las recomendaciones son orientación, no hechos de la conversación.',
-    context: 'Contexto', executiveAssessment: 'Evaluación ejecutiva', overallScore: 'Puntuación general', scoreConfidence: 'Confianza de la puntuación', outcomeForecast: 'Previsión orientativa', rationale: 'Justificación', caveat: 'Salvedad',
+    context: 'Contexto', executiveAssessment: 'Evaluación ejecutiva', overallScore: 'Puntuación general', scoreConfidence: 'Confianza de la puntuación', outcomeForecast: 'Previsión orientativa', evidenceSignal: 'Fuerza de la evidencia observada', decisionReadiness: 'Preparación para decidir', keyTradeoff: 'Trade-off central', rationale: 'Justificación', caveat: 'Salvedad',
     strengths: 'Evidencias más sólidas', concerns: 'Puntos de atención', contradictions: 'Contradicciones', competencies: 'Competencias', questionReviews: 'Revisión pregunta por pregunta', coaching: 'Plan de preparación', priorities: 'Prioridades', candidateQuestions: 'Preguntas del candidato', practiceQuestions: 'Preguntas de práctica',
     lessonContext: 'Contexto de la clase', objective: 'Objetivo', targetLanguage: 'Idioma objetivo', learnerSpeakers: 'Alumnos', teacherSpeakers: 'Profesores', topics: 'Temas', learnerProfiles: 'Perfiles de alumnos', cefr: 'CEFR', skills: 'Habilidades', languagePatterns: 'Patrones de lenguaje', corrections: 'Correcciones prioritarias', lessonProgress: 'Progreso de la clase', teacherPlan: 'Plan de la próxima clase', homework: 'Tarea',
-    meetingContext: 'Contexto de la reunión', executiveBrief: 'Resumen para el gerente', decisions: 'Decisiones confirmadas', actionItems: 'Acciones explícitas', proposals: 'Propuestas', risks: 'Riesgos', blockers: 'Bloqueos', dependencies: 'Dependencias', participantViews: 'Perspectivas de participantes', metrics: 'Métricas', openQuestions: 'Preguntas abiertas', nextMeeting: 'Próxima reunión recomendada',
+    meetingContext: 'Contexto de la reunión', executiveBrief: 'Resumen para el gerente', decisions: 'Decisiones confirmadas', actionItems: 'Acciones explícitas', proposals: 'Propuestas', risks: 'Riesgos', blockers: 'Bloqueos', dependencies: 'Dependencias', participantViews: 'Perspectivas de participantes', tensions: 'Tensiones y trade-offs', strategicImplications: 'Implicaciones estratégicas', metrics: 'Métricas', openQuestions: 'Preguntas abiertas', nextMeeting: 'Próxima reunión recomendada',
     statement: 'Síntesis', evidence: 'Evidencia', speaker: 'Participante', quote: 'Fragmento', level: 'Nivel', reasons: 'Motivos', coverage: 'Cobertura', title: 'Título', language: 'Idioma',
   },
 };
@@ -94,7 +94,7 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
   const evidenceQuality = isRecord(safe.evidenceQuality) ? safe.evidenceQuality : {};
   const modes = asArray(safe.analysisModes).map((mode) => scalarText(mode, language)).filter(Boolean);
   const keyPoints = asArray(summary.keyPoints);
-  const limitations = asArray(evidenceQuality.limitations).map((item) => scalarText(item, language)).filter(Boolean);
+  const limitations = [...asArray(evidenceQuality.limitations), ...asArray(evidenceQuality.missingInformation)].map((item) => scalarText(item, language)).filter(Boolean);
   const doc = new jsPDF({ format: 'a4', unit: 'mm', compress: true, putOnlyUsedFonts: true });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -253,6 +253,14 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
   if (recording.createdAt) addText(`${copy.recorded}: ${dateFormatter.format(new Date(recording.createdAt))}`, { size: 8.2, color: muted, gapAfter: 1 });
   addText(`${copy.generated}: ${dateFormatter.format(new Date())}`, { size: 8.2, color: muted, gapAfter: 5 });
   addStatStrip();
+
+  if (isRecord(summary.bottomLine)) {
+    const statement = scalarText(summary.bottomLine.statement, language);
+    if (statement) addPanel(copy.bottomLine, statement);
+  }
+  renderNode('criticalFindings', summary.criticalFindings);
+  renderNode('recommendedActions', summary.recommendedActions);
+  renderNode('unansweredQuestions', summary.unansweredQuestions);
 
   if (keyPoints.length) {
     addSectionTitle(copy.keyPoints);
