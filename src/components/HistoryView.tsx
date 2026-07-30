@@ -1024,7 +1024,16 @@ export default function HistoryView({
                 {aiData.isAnalyzing ? (
                   <div className="content-status"><Loader2 className="spin" /><strong>{aiData.status || t('history', 'analyzingStep')}</strong></div>
                 ) : aiData.analysis ? (
-                  <AIAnalysis analysis={aiData.analysis} />
+                  <AIAnalysis
+                    analysis={aiData.analysis}
+                    grammarAudioEnabled={transcriptData.language === 'en-US'}
+                    transcriptSegments={transcriptData.segments}
+                    audioAvailable={selected.hasAudio !== false && Boolean(playbackSource)}
+                    activeAudioSegmentKey={activeSegmentKey}
+                    isAudioPlaying={isPlaying}
+                    onPlayAudioSegment={(key, start, end) => void playTranscriptSegment(key, start, end)}
+                    onPauseRecordingAudio={() => audioRef.current?.pause()}
+                  />
                 ) : (
                   <div className={aiData.error ? 'content-status is-error' : 'content-status'}>
                     <Sparkles /><strong>{aiData.status || t('history', 'readyForAnalysis')}</strong>

@@ -103,6 +103,15 @@ Object.assign(sample.evidenceQuality, {
   }]
 });
 
+const transcriptSegments = [{
+  id: 'preview-grammar-segment',
+  position: 0,
+  speaker: 'Alex',
+  text: 'Last year I lead the migration',
+  startMs: 12500,
+  endMs: 15300,
+}];
+
 export default function InsightsPreview() {
-  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the structured v6 report.</p></header><AIAnalysis analysis={sample} /></main>;
+  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the structured v6 report.</p></header><AIAnalysis analysis={sample} grammarAudioEnabled transcriptSegments={transcriptSegments} audioAvailable onPlayAudioSegment={() => {}} /></main>;
 }

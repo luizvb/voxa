@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -13,16 +13,33 @@ import {
   Lightbulb,
   ListChecks,
   MessageCircle,
+  Pause,
+  Play,
   Quote,
   ShieldCheck,
+  Square,
   Target,
   TrendingUp,
   Users,
+  Volume2,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { findTranscriptSegmentForCorrection } from '../lib/transcript-segment-match';
+import type { TranscriptSegment } from '../platform';
 
 type AnalysisMode = 'interview' | 'language' | 'meeting';
-interface AIAnalysisProps { analysis: any; }
+type PlayAudioSegment = (key: string, startSeconds: number, endSeconds: number) => void;
+
+interface AIAnalysisProps {
+  analysis: any;
+  grammarAudioEnabled?: boolean;
+  transcriptSegments?: TranscriptSegment[];
+  audioAvailable?: boolean;
+  activeAudioSegmentKey?: string | null;
+  isAudioPlaying?: boolean;
+  onPlayAudioSegment?: PlayAudioSegment;
+  onPauseRecordingAudio?: () => void;
+}
 
 const asArray = (value: any) => Array.isArray(value) ? value : [];
 const sentence = (value: any, fallback: string) => typeof value === 'string' && value.trim() ? value : fallback;
@@ -149,13 +166,74 @@ function normalizeLearner(profile: any) {
   };
 }
 
-function LanguageReport({ languageClass, legacySpeakers, t, fallback }: { languageClass: any; legacySpeakers: any[]; t: any; fallback: string }) {
+interface LanguageReportProps {
+  languageClass: any;
+  legacySpeakers: any[];
+  t: any;
+  fallback: string;
+  grammarAudioEnabled?: boolean;
+  transcriptSegments?: TranscriptSegment[];
+  audioAvailable?: boolean;
+  activeAudioSegmentKey?: string | null;
+  isAudioPlaying?: boolean;
+  onPlayAudioSegment?: PlayAudioSegment;
+  onPauseRecordingAudio?: () => void;
+}
+
+function LanguageReport({
+  languageClass,
+  legacySpeakers,
+  t,
+  fallback,
+  grammarAudioEnabled,
+  transcriptSegments,
+  audioAvailable,
+  activeAudioSegmentKey,
+  isAudioPlaying,
+  onPlayAudioSegment,
+  onPauseRecordingAudio,
+}: LanguageReportProps) {
   const lesson = languageClass.lessonContext || languageClass.lessonBrief || {};
   const profiles = (asArray(languageClass.learnerProfiles).length
     ? asArray(languageClass.learnerProfiles)
     : legacySpeakers.map((speaker) => ({ speaker: speaker.id, cefrEstimate: speaker.language?.cefrEstimate || speaker.proficiency?.level, scores: speaker.language?.scores || {}, strengths: asArray(speaker.language?.strengths).map((insight: string) => ({ signal: insight })), priorities: asArray(speaker.language?.improvements).map((insight: string) => ({ signal: insight })), teacherFeedback: speaker.language?.feedback || speaker.feedback }))).map(normalizeLearner);
   const [activeLearner, setActiveLearner] = useState(profiles[0]?.speaker || '');
+  const [speakingCorrectionKey, setSpeakingCorrectionKey] = useState<string | null>(null);
+  const [speechSupported] = useState(() => typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window);
+  const speechRequestRef = useRef(0);
   useEffect(() => { if (!profiles.some((item) => item.speaker === activeLearner)) setActiveLearner(profiles[0]?.speaker || ''); }, [activeLearner, profiles]);
+  useEffect(() => () => {
+    speechRequestRef.current += 1;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, []);
+  const stopBrowserSpeech = () => {
+    speechRequestRef.current += 1;
+    window.speechSynthesis.cancel();
+    setSpeakingCorrectionKey(null);
+  };
+  const speakCorrectedPhrase = (key: string, phrase: string) => {
+    if (!speechSupported) return;
+    if (speakingCorrectionKey === key) {
+      stopBrowserSpeech();
+      return;
+    }
+
+    onPauseRecordingAudio?.();
+    window.speechSynthesis.cancel();
+    const request = ++speechRequestRef.current;
+    const utterance = new SpeechSynthesisUtterance(phrase);
+    const voices = window.speechSynthesis.getVoices();
+    utterance.lang = 'en-US';
+    utterance.rate = 0.88;
+    utterance.voice = voices.find((voice) => voice.lang.toLowerCase() === 'en-us')
+      || voices.find((voice) => voice.lang.toLowerCase().startsWith('en'))
+      || null;
+    utterance.onend = utterance.onerror = () => {
+      if (speechRequestRef.current === request) setSpeakingCorrectionKey(null);
+    };
+    setSpeakingCorrectionKey(key);
+    window.speechSynthesis.speak(utterance);
+  };
   const learner = profiles.find((item) => item.speaker === activeLearner) || profiles[0];
   const progress = languageClass.lessonProgress || {};
   const teacherPlan = languageClass.teacherPlan || languageClass.teacherBrief || {};
@@ -177,7 +255,64 @@ function LanguageReport({ languageClass, legacySpeakers, t, fallback }: { langua
 
       <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'languagePatterns')} count={patterns.length} /><div className="pattern-table">{patterns.map((item, index) => <article key={`${item.pattern}-${index}`}><header><span>{level(item.category || item.frequency)}</span><strong>{item.pattern}</strong><b>{level(item.frequency)}</b></header><p>{item.impact}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
 
-      <section className="analysis-register"><RegisterHeading icon={ShieldCheck} title={t('ai', 'corrections')} count={asArray(languageClass.corrections).length} /><div className="correction-list">{asArray(languageClass.corrections).map((item, index) => <article key={`${item.original}-${index}`}><header><span className={`priority priority-${item.priority || 'medium'}`}>{item.priority || 'medium'}</span><small>{item.speaker} {item.category ? `/ ${item.category}` : ''}</small></header><div><del>{item.original}</del><strong>{item.corrected}</strong></div><p>{item.explanation}</p>{item.rule && <small>{t('ai', 'rule')}: {item.rule}. {level(item.recurrence)}</small>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
+      <section className="analysis-register">
+        <RegisterHeading icon={ShieldCheck} title={t('ai', 'corrections')} count={asArray(languageClass.corrections).length} />
+        <div className="correction-list">
+          {asArray(languageClass.corrections).map((item, index) => {
+            const correctionKey = `${item.original}-${index}`;
+            const isGrammar = grammarAudioEnabled && String(item.category || '').toLowerCase() === 'grammar';
+            const segment = isGrammar ? findTranscriptSegmentForCorrection(transcriptSegments, item) : undefined;
+            const segmentKey = segment ? `grammar:${segment.id}` : '';
+            const canPlayOriginal = Boolean(
+              audioAvailable
+              && segment
+              && segment.endMs > segment.startMs
+              && onPlayAudioSegment,
+            );
+            const correctedPhrase = typeof item.corrected === 'string' ? item.corrected.trim() : '';
+            const canSpeakCorrection = isGrammar && speechSupported && Boolean(correctedPhrase);
+            const showAudioComparison = canPlayOriginal || canSpeakCorrection;
+            const originalIsPlaying = canPlayOriginal && activeAudioSegmentKey === segmentKey && isAudioPlaying;
+            const correctionIsPlaying = speakingCorrectionKey === correctionKey;
+            return (
+              <article className={showAudioComparison ? 'has-audio-comparison' : undefined} key={correctionKey}>
+                <header><span className={`priority priority-${item.priority || 'medium'}`}>{item.priority || 'medium'}</span><small>{item.speaker} {item.category ? `/ ${item.category}` : ''}</small></header>
+                <div><del>{item.original}</del><strong>{item.corrected}</strong></div>
+                <p>{item.explanation}</p>
+                {item.rule && <small>{t('ai', 'rule')}: {item.rule}. {level(item.recurrence)}</small>}
+                <Evidence items={item.evidence} label={t('ai', 'showEvidence')} />
+                {showAudioComparison && (
+                  <div className="grammar-audio-comparison" role="group" aria-label={t('ai', 'compareGrammarAudio')}>
+                    {canPlayOriginal && segment && onPlayAudioSegment && (
+                      <button
+                        type="button"
+                        aria-pressed={Boolean(originalIsPlaying)}
+                        onClick={() => {
+                          stopBrowserSpeech();
+                          onPlayAudioSegment(segmentKey, segment.startMs / 1000, segment.endMs / 1000);
+                        }}
+                      >
+                        {originalIsPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+                        <span>{originalIsPlaying ? t('ai', 'pauseOriginalAudio') : t('ai', 'listenOriginalAudio')}</span>
+                      </button>
+                    )}
+                    {canSpeakCorrection && (
+                      <button
+                        type="button"
+                        aria-pressed={correctionIsPlaying}
+                        onClick={() => speakCorrectedPhrase(correctionKey, correctedPhrase)}
+                      >
+                        {correctionIsPlaying ? <Square aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+                        <span>{correctionIsPlaying ? t('ai', 'stopCorrectedAudio') : t('ai', 'listenCorrectedAudio')}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'lessonProgress')} /><div className="progress-columns"><div><h5>{t('ai', 'successfulUse')}</h5>{asArray(progress.successfulUse).map((item, index) => <article key={`${item.skill}-${index}`}><strong>{item.skill}</strong><p>{item.whySuccessful}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'selfCorrections')}</h5>{asArray(progress.selfCorrections).map((item, index) => <article key={`${item.observation}-${index}`}><strong>{item.observation}</strong><p>{item.significance}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'missedOpportunities')}</h5>{asArray(progress.missedOpportunities).map((item, index) => <article key={`${item.opportunity}-${index}`}><strong>{item.opportunity}</strong><p>{item.coachPrompt}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
 
@@ -216,7 +351,16 @@ function MeetingReport({ meeting, t, fallback }: { meeting: any; t: any; fallbac
   );
 }
 
-export default function AIAnalysis({ analysis }: AIAnalysisProps) {
+export default function AIAnalysis({
+  analysis,
+  grammarAudioEnabled,
+  transcriptSegments,
+  audioAvailable,
+  activeAudioSegmentKey,
+  isAudioPlaying,
+  onPlayAudioSegment,
+  onPauseRecordingAudio,
+}: AIAnalysisProps) {
   const { t } = useLanguage();
   const fallback = t('ai', 'notAvailable');
   const modes = useMemo(() => {
@@ -253,7 +397,21 @@ export default function AIAnalysis({ analysis }: AIAnalysisProps) {
       <nav className="analysis-lens-tabs" aria-label={t('ai', 'analysisLenses')}>{modes.map((mode) => <button type="button" key={mode} className={activeMode === mode ? 'is-active' : ''} aria-pressed={activeMode === mode} onClick={() => setActiveMode(mode)}>{mode === 'interview' ? <BriefcaseBusiness /> : mode === 'language' ? <BookOpen /> : <Users />}<span>{t('analysisModes', mode)}</span><small>{t('ai', `${mode}Lens`)}</small></button>)}</nav>
 
       {activeMode === 'interview' && analysis.interview && <InterviewReport interview={analysis.interview} t={t} fallback={fallback} />}
-      {activeMode === 'language' && analysis.languageClass && <LanguageReport languageClass={analysis.languageClass} legacySpeakers={asArray(analysis.speakers)} t={t} fallback={fallback} />}
+      {activeMode === 'language' && analysis.languageClass && (
+        <LanguageReport
+          languageClass={analysis.languageClass}
+          legacySpeakers={asArray(analysis.speakers)}
+          t={t}
+          fallback={fallback}
+          grammarAudioEnabled={grammarAudioEnabled}
+          transcriptSegments={transcriptSegments}
+          audioAvailable={audioAvailable}
+          activeAudioSegmentKey={activeAudioSegmentKey}
+          isAudioPlaying={isAudioPlaying}
+          onPlayAudioSegment={onPlayAudioSegment}
+          onPauseRecordingAudio={onPauseRecordingAudio}
+        />
+      )}
       {activeMode === 'meeting' && analysis.meeting && <MeetingReport meeting={analysis.meeting} t={t} fallback={fallback} />}
 
       <EvidenceCatalog quality={quality} t={t} />

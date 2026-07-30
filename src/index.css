@@ -777,6 +777,44 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .correction-list del, .correction-list article > div > strong { font-size: 11px; }
 .correction-list article > p { margin: 7px 0 0; color: var(--text-secondary); }
 .correction-list article > small { display: block; margin-top: 5px; color: var(--text-tertiary); font-size: 8px; }
+.correction-list article.has-audio-comparison { position: relative; padding-bottom: 53px; }
+.correction-list article > .grammar-audio-comparison {
+  position: absolute;
+  right: 0;
+  bottom: 10px;
+  left: 0;
+  display: flex;
+  grid-template-columns: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 0;
+}
+.grammar-audio-comparison button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d7dbd5;
+  border-radius: 7px;
+  padding: 6px 9px;
+  background: #fff;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.grammar-audio-comparison button:last-child { border-color: #cad9cf; background: #f2f7f3; color: #405e49; }
+.grammar-audio-comparison button:hover { border-color: #aeb5ad; color: var(--text-primary); }
+.grammar-audio-comparison button:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+.grammar-audio-comparison button[aria-pressed="true"] { border-color: #627567; background: #e8f0ea; color: #314b38; }
+.grammar-audio-comparison svg { width: 13px; height: 13px; flex: 0 0 auto; }
+@media (hover: hover) and (pointer: fine) {
+  .grammar-audio-comparison { opacity: 0; pointer-events: none; transform: translateY(3px); transition: opacity 140ms ease, transform 140ms ease; }
+  .correction-list article:hover > .grammar-audio-comparison,
+  .correction-list article:focus-within > .grammar-audio-comparison { opacity: 1; pointer-events: auto; transform: translateY(0); }
+}
 .progress-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0; }
 .reinforce-list, .homework-list { margin-top: 16px; }
 .homework-list article { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; }
@@ -1095,6 +1133,9 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
   .correction-list article { grid-template-columns: 64px 1fr; }
   .correction-better { grid-column: 2; }
   .correction-list small { grid-column: 2; }
+  .correction-list article.has-audio-comparison { padding-bottom: 12px; }
+  .correction-list article > .grammar-audio-comparison { position: static; margin-top: 12px; }
+  .grammar-audio-comparison button { min-height: 44px; flex: 1 1 145px; justify-content: center; }
   .onboarding-steps { grid-template-columns: 1fr; }
 }
 
