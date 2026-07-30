@@ -14,7 +14,8 @@ test('paid users do not receive an upgrade prompt and account state remains visi
   assert.match(sidebar, /case 'active':[\s\S]*statusPaid/);
   assert.match(sidebar, /className="account-plan-summary"/);
   assert.match(sidebar, /className="account-action account-plan-action"/);
-  assert.match(sidebar, /className="account-action account-billing-action"/);
+  assert.doesNotMatch(sidebar, /className="account-action account-billing-action"/);
+  assert.doesNotMatch(sidebar, /manageStripe/);
   assert.match(sidebar, /className="account-action account-signout"/);
   assert.match(app, /setBillingStatus\(null\)/);
   assert.match(locales, /Teste grátis/);

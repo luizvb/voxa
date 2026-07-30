@@ -1,6 +1,6 @@
 import { upload } from '@vercel/blob/client';
 import { getAuthCredentials, getAuthToken } from './auth-token';
-import type { AnalysisInput, BillingStatus, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
+import type { AnalysisInput, AnalysisSummary, BillingStatus, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
@@ -82,7 +82,11 @@ export class WebPlatform implements VoxaPlatform {
   }
   getTranscript(id: string) { return request<{ markdown: string; speakers?: string[] } | null>(`/api/recordings/${encodeURIComponent(id)}/transcript`); }
   analyze(input: AnalysisInput) { return request<any>(`/api/recordings/${encodeURIComponent(input.recordingId)}/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) }); }
-  getAnalysis(id: string) { return request<any | null>(`/api/recordings/${encodeURIComponent(id)}/analysis`); }
+  listAnalyses(id: string) { return request<AnalysisSummary[]>(`/api/recordings/${encodeURIComponent(id)}/analyses`); }
+  getAnalysis(id: string, analysisId?: string) {
+    const suffix = analysisId ? `/analyses/${encodeURIComponent(analysisId)}` : '/analysis';
+    return request<any | null>(`/api/recordings/${encodeURIComponent(id)}${suffix}`);
+  }
   createCheckoutSession() { return request<{ url: string | null }>('/api/stripe/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); }
   getBillingStatus() { return request<BillingStatus>('/api/stripe/status'); }
   createBillingPortalSession() { return request<{ url: string | null }>('/api/stripe/portal', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); }

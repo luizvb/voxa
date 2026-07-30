@@ -419,11 +419,20 @@ ipcMain.handle('llm:analyze', async (_event, input) => {
 });
 
 ipcMain.handle('llm:get-analysis', async (_event, input) => {
-  const response = await fetchApi(`/api/recordings/${input.recordingId}/analysis`, {
+  const suffix = input.analysisId ? `/analyses/${encodeURIComponent(input.analysisId)}` : '/analysis';
+  const response = await fetchApi(`/api/recordings/${encodeURIComponent(input.recordingId)}${suffix}`, {
     headers: { Authorization: `Bearer ${input.authToken || ''}` }
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('Could not load analysis');
+  return response.json();
+});
+
+ipcMain.handle('llm:list-analyses', async (_event, input) => {
+  const response = await fetchApi(`/api/recordings/${encodeURIComponent(input.recordingId)}/analyses`, {
+    headers: { Authorization: `Bearer ${input.authToken || ''}` }
+  });
+  if (!response.ok) throw new Error('Could not load analysis history');
   return response.json();
 });
 

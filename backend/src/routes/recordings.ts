@@ -5,9 +5,11 @@ import {
   createRecordingUploadToken,
   deleteRecording,
   getAnalysis,
+  getAnalysisById,
   getTranscript,
   getRecordingStatus,
   importTranscript,
+  listAnalyses,
   streamRecording,
   listRecordings,
   transcribeRecording,
@@ -30,6 +32,8 @@ router.get('/:id/status', getRecordingStatus);
 router.get('/:id/media', streamRecording);
 router.post('/:id/analyze', requireVoxaPro, analyzeRecording);
 router.get('/:id/transcript', getTranscript);
+router.get('/:id/analyses', listAnalyses);
+router.get('/:id/analyses/:analysisId', getAnalysisById);
 router.get('/:id/analysis', getAnalysis);
 router.delete('/:id', deleteRecording);
 

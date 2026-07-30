@@ -438,6 +438,11 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .transcription-language-control { display: grid; gap: 4px; }
 .transcription-language-control select { min-width: 150px; }
 .analysis-config-panel { display: grid; gap: 12px; border-bottom: 1px solid var(--line); padding: 14px 16px; background: #fafaf8; }
+.analysis-history-field { display: grid; gap: 7px; }
+.analysis-history-field > span { color: var(--text-tertiary); font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.analysis-history-field select { width: 100%; min-height: 39px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 11px; outline: 0; background: #fff; color: var(--text); font-size: 12px; }
+.analysis-history-field select:focus { border-color: #8e918a; box-shadow: 0 0 0 3px #eceee9; }
+.analysis-history-field select:disabled { cursor: wait; opacity: .65; }
 .config-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .config-heading-row button { border: 0; padding: 2px; background: transparent; color: var(--text-secondary); font-size: 10px; font-weight: 700; cursor: pointer; }
 .speaker-picker { margin-top: 7px; }

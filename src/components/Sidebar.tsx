@@ -16,7 +16,7 @@ import type { AppView } from '../App';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../contexts/LanguageContext';
 import { Logo } from './Logo';
-import { platform, type BillingStatus } from '../platform';
+import type { BillingStatus } from '../platform';
 
 interface SidebarProps {
   activeView: AppView;
@@ -38,8 +38,7 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
   const { user, logout, isAuthenticated, loginWithRedirect } = useAuth();
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isOpeningBilling, setIsOpeningBilling] = useState(false);
-  const [billingError, setBillingError] = useState('');
+  const [accountError, setAccountError] = useState('');
 
   const displayName = user?.name || user?.email || t('common', 'guest');
   const displayEmail = user?.email || '';
@@ -99,34 +98,14 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
     onViewChange('billing');
   };
 
-  const handleBillingClick = async () => {
-    if (isOpeningBilling) return;
-    if (!billingStatus?.portalAvailable) {
-      onViewChange('billing');
-      return;
-    }
-
-    setBillingError('');
-    setIsOpeningBilling(true);
-    try {
-      const value = await platform.createBillingPortalSession();
-      if (!value.url) throw new Error(t('billing', 'portalUnavailable'));
-      await platform.openBillingUrl(value.url);
-    } catch (error) {
-      setBillingError(error instanceof Error ? error.message : t('billing', 'portalOpenFailed'));
-    } finally {
-      setIsOpeningBilling(false);
-    }
-  };
-
   const handleLogout = async () => {
     if (isSigningOut) return;
-    setBillingError('');
+    setAccountError('');
     setIsSigningOut(true);
     try {
       await logout();
     } catch (error) {
-      setBillingError(error instanceof Error ? error.message : t('sidebar', 'signOutFailed'));
+      setAccountError(error instanceof Error ? error.message : t('sidebar', 'signOutFailed'));
     } finally {
       setIsSigningOut(false);
     }
@@ -254,21 +233,7 @@ export default function Sidebar({ activeView, onViewChange, collapsed, showToggl
                 {!collapsed && <span>{t('billing', 'eyebrow')}</span>}
                 {!collapsed && <ChevronRight />}
               </button>
-              {billingStatus?.portalAvailable && (
-                <button
-                  type="button"
-                  className="account-action account-billing-action"
-                  onClick={() => void handleBillingClick()}
-                  disabled={isOpeningBilling}
-                  aria-busy={isOpeningBilling}
-                  aria-label={t('billing', 'manageStripe')}
-                  title={collapsed ? t('billing', 'manageStripe') : undefined}
-                >
-                  <ArrowUpRight />
-                  {!collapsed && <span>{t('billing', 'manageStripe')}</span>}
-                </button>
-              )}
-              {billingError && !collapsed && <p className="account-error" role="alert">{billingError}</p>}
+              {accountError && !collapsed && <p className="account-error" role="alert">{accountError}</p>}
             </>
           )}
 

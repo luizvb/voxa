@@ -302,6 +302,52 @@ export const getAnalysis = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const listAnalyses = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { rows } = await db.query(`
+      SELECT
+        a.id,
+        a.created_at,
+        COALESCE(a.json_data->'analysisModes', '[]'::jsonb) AS analysis_modes
+      FROM analyses a
+      JOIN recordings r ON r.id = a.recording_id
+      WHERE a.recording_id = $1 AND r.user_id = $2
+      ORDER BY a.created_at DESC, a.id DESC
+    `, [req.params.id, userId]);
+
+    res.json(rows.map((row: any) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      modes: Array.isArray(row.analysis_modes) ? row.analysis_modes : []
+    })));
+  } catch (error: any) {
+    console.error('Error listing analyses:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+export const getAnalysisById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { rows } = await db.query(`
+      SELECT a.json_data
+      FROM analyses a
+      JOIN recordings r ON r.id = a.recording_id
+      WHERE a.recording_id = $1 AND a.id = $2 AND r.user_id = $3
+      LIMIT 1
+    `, [req.params.id, req.params.analysisId, userId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Analysis not found' });
+      return;
+    }
+    res.json(rows[0].json_data);
+  } catch (error: any) {
+    console.error('Error loading analysis:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
 export const deleteRecording = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;

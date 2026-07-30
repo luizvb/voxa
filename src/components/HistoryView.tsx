@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
-import { platform, type Recording, type TranscriptionLanguage } from '../platform';
+import { platform, type AnalysisSummary, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 import AIAnalysis from './AIAnalysis';
@@ -125,6 +125,8 @@ export default function HistoryView({
   const [query, setQuery] = useState('');
   const [transcriptData, setTranscriptData] = useState<TranscriptState>({ isTranscribing: false });
   const [aiData, setAiData] = useState<AnalysisState>({ isAnalyzing: false });
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisSummary[]>([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState('');
   const [analysisModes, setAnalysisModes] = useState<AnalysisMode[]>(getSavedAnalysisModes);
   const [analysisContext, setAnalysisContext] = useState('');
   const [detectedSpeakers, setDetectedSpeakers] = useState<string[]>([]);
@@ -172,6 +174,8 @@ export default function HistoryView({
       setActiveTab('transcript');
       setTranscriptData({ isTranscribing: false });
       setAiData({ isAnalyzing: false });
+      setAnalysisHistory([]);
+      setSelectedAnalysisId('');
       setShowDeleteDialog(false);
       setPdfStatus('');
       setDetectedSpeakers([]);
@@ -194,10 +198,18 @@ export default function HistoryView({
         setDetectedSpeakers(speakers);
         setSelectedSpeakers(speakers);
 
-        const analysis = await platform.getAnalysis(selected.id);
-        setAiData(analysis
-          ? { analysis, isAnalyzing: false }
-          : { isAnalyzing: false, status: t('history', 'noAnalysis') });
+        try {
+          const history = await platform.listAnalyses(selected.id);
+          const latest = history[0];
+          const analysis = latest ? await platform.getAnalysis(selected.id, latest.id) : null;
+          setAnalysisHistory(history);
+          setSelectedAnalysisId(latest?.id || '');
+          setAiData(analysis
+            ? { analysis, isAnalyzing: false }
+            : { isAnalyzing: false, status: t('history', 'noAnalysis') });
+        } catch (error: any) {
+          setAiData({ isAnalyzing: false, status: error?.message || t('history', 'loadFailed'), error: true });
+        }
       } catch (error: any) {
         setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'loadFailed'), error: true });
       }
@@ -276,6 +288,14 @@ export default function HistoryView({
           outputLanguage: locale,
         });
         setAiData({ analysis, isAnalyzing: false });
+        try {
+          const history = await platform.listAnalyses(selected.id);
+          setAnalysisHistory(history);
+          setSelectedAnalysisId(history[0]?.id || '');
+        } catch {
+          setAnalysisHistory([]);
+          setSelectedAnalysisId('');
+        }
         setActiveTab('analysis');
       } catch (error: any) {
         setTranscriptData((current) => ({ ...current, isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true }));
@@ -320,15 +340,39 @@ export default function HistoryView({
     setAiData({ isAnalyzing: true, status: t('history', 'analyzingStep') });
     setActiveTab('analysis');
     try {
-      setAiData({ analysis: await platform.analyze({
+      const analysis = await platform.analyze({
         recordingId: selected.id,
         modes: analysisModes,
         outputLanguage: locale,
         context: analysisContext,
         selectedSpeakers: detectedSpeakers.length ? selectedSpeakers : undefined,
-      }), isAnalyzing: false });
+      });
+      setAiData({ analysis, isAnalyzing: false });
+      try {
+        const history = await platform.listAnalyses(selected.id);
+        setAnalysisHistory(history);
+        setSelectedAnalysisId(history[0]?.id || '');
+      } catch {
+        setAnalysisHistory([]);
+        setSelectedAnalysisId('');
+      }
     } catch (error: any) {
       setAiData({ isAnalyzing: false, status: error?.message || t('history', 'processingFailed'), error: true });
+    }
+  };
+
+  const handleAnalysisSelection = async (analysisId: string) => {
+    if (!selected || analysisId === selectedAnalysisId) return;
+    setSelectedAnalysisId(analysisId);
+    setPdfStatus('');
+    setAiData({ isAnalyzing: true, status: t('history', 'loadingAnalysis') });
+    try {
+      const analysis = await platform.getAnalysis(selected.id, analysisId);
+      setAiData(analysis
+        ? { analysis, isAnalyzing: false }
+        : { isAnalyzing: false, status: t('history', 'noAnalysis'), error: true });
+    } catch (error: any) {
+      setAiData({ isAnalyzing: false, status: error?.message || t('history', 'loadFailed'), error: true });
     }
   };
 
@@ -583,6 +627,24 @@ export default function HistoryView({
 
         {activeTab === 'analysis' && transcriptData.markdown && (
           <div className="analysis-config-panel">
+            {!!analysisHistory.length && (
+              <label className="analysis-history-field">
+                <span>{t('history', 'analysisHistory')}</span>
+                <select
+                  value={selectedAnalysisId}
+                  onChange={(event) => void handleAnalysisSelection(event.target.value)}
+                  disabled={aiData.isAnalyzing}
+                >
+                  {analysisHistory.map((item, index) => (
+                    <option value={item.id} key={item.id}>
+                      {new Date(item.createdAt).toLocaleString(locale)}
+                      {item.modes.length ? ` · ${item.modes.map((mode) => t('analysisModes', mode)).join(', ')}` : ''}
+                      {index === 0 ? ` · ${t('history', 'latestAnalysis')}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div>
               <span className="config-label">{t('history', 'analysisTypes')}</span>
               <div className="analysis-mode-picker">
@@ -618,7 +680,7 @@ export default function HistoryView({
             ) : (
               <motion.div key="analysis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 {aiData.isAnalyzing ? (
-                  <div className="content-status"><Loader2 className="spin" /><strong>{t('history', 'analyzingStep')}</strong></div>
+                  <div className="content-status"><Loader2 className="spin" /><strong>{aiData.status || t('history', 'analyzingStep')}</strong></div>
                 ) : aiData.analysis ? (
                   <AIAnalysis analysis={aiData.analysis} />
                 ) : (

@@ -54,6 +54,12 @@ export interface AnalysisInput {
   selectedSpeakers?: string[];
 }
 
+export interface AnalysisSummary {
+  id: string;
+  createdAt: string;
+  modes: string[];
+}
+
 export interface BillingStatus {
   configured: boolean;
   planKey: string | null;
@@ -81,7 +87,8 @@ export interface VoxaPlatform {
   transcribe(input: TranscriptionInput): Promise<{ markdown: string }>;
   getTranscript(recordingId: string): Promise<TranscriptResult | null>;
   analyze(input: AnalysisInput): Promise<any>;
-  getAnalysis(recordingId: string): Promise<any | null>;
+  listAnalyses(recordingId: string): Promise<AnalysisSummary[]>;
+  getAnalysis(recordingId: string, analysisId?: string): Promise<any | null>;
   exportAnalysisPdf(input: { analysis: any; recording: Recording; locale: string }): Promise<{ canceled: boolean; filePath?: string }>;
   loadRecordingMedia?(recording: Recording): Promise<RecordingMediaSource>;
   subscribeToRecordingsChanged(callback: () => void): () => void;
