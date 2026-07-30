@@ -2,7 +2,7 @@ const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const ANALYSIS_MODES = ['interview', 'language', 'meeting'] as const;
 export type AnalysisMode = typeof ANALYSIS_MODES[number];
-export const DEFAULT_ANALYSIS_MODEL = 'openai/gpt-5.4';
+export const DEFAULT_ANALYSIS_MODEL = 'openai/gpt-5.6-sol-pro';
 export const DEFAULT_ANALYSIS_REASONING_EFFORT = 'medium';
 
 export function configuredAnalysisModel(env: NodeJS.ProcessEnv = process.env): string {

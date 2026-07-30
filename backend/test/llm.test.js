@@ -11,9 +11,9 @@ test('analysis modes are validated, deduplicated and default to language', () =>
 });
 
 test('frontier analysis model is the default while explicit configuration still wins', () => {
-  assert.equal(DEFAULT_ANALYSIS_MODEL, 'openai/gpt-5.4');
-  assert.equal(configuredAnalysisModel({}), 'openai/gpt-5.4');
-  assert.equal(configuredAnalysisModel({ OPENROUTER_MODEL: 'google/gemini-3.1-flash-lite' }), 'openai/gpt-5.4');
+  assert.equal(DEFAULT_ANALYSIS_MODEL, 'openai/gpt-5.6-sol-pro');
+  assert.equal(configuredAnalysisModel({}), 'openai/gpt-5.6-sol-pro');
+  assert.equal(configuredAnalysisModel({ OPENROUTER_MODEL: 'google/gemini-3.1-flash-lite' }), 'openai/gpt-5.6-sol-pro');
   assert.equal(configuredAnalysisModel({ OPENROUTER_MODEL: 'legacy/model' }), 'legacy/model');
   assert.equal(configuredAnalysisModel({ VOXA_ANALYSIS_MODEL: 'preferred/model', OPENROUTER_MODEL: 'legacy/model' }), 'preferred/model');
 });
