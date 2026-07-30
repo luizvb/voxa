@@ -406,6 +406,11 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .transcript-block header { display: grid; align-content: start; gap: 4px; }
 .transcript-block header strong { color: var(--text); font-size: 12px; }
 .transcript-block header time { color: var(--text-tertiary); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 10px; }
+.transcript-segment-actions { display: flex; gap: 5px; margin-top: 5px; }
+.transcript-segment-button { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: #ffffff; color: var(--text-secondary); cursor: pointer; }
+.transcript-segment-button:hover { border-color: var(--line-strong); background: var(--surface); color: var(--text); }
+.transcript-segment-button:disabled { cursor: wait; opacity: .55; }
+.transcript-segment-button svg { width: 13px; height: 13px; }
 .transcript-block p { margin: 0; color: #343432; font-size: 14px; line-height: 1.72; overflow-wrap: anywhere; }
 .transcript-divider { margin: 18px 0 6px; color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
 

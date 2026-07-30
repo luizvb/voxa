@@ -23,6 +23,7 @@ import {
 import type { LibraryStatus } from '../App';
 import { platform, type AnalysisSummary, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
+import { createWavSegment, findTranscriptSegmentEnd, parseTranscriptTimestamp, safeAudioSegmentName } from '../lib/audio-segment';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 import AIAnalysis from './AIAnalysis';
 
@@ -74,11 +75,44 @@ function formatDuration(ms: number) {
   return `${minutes}:${seconds}`;
 }
 
-function TranscriptDocument({ markdown, youLabel }: { markdown: string; youLabel: string }) {
+type TranscriptDocumentProps = {
+  markdown: string;
+  youLabel: string;
+  audioAvailable: boolean;
+  durationSeconds: number;
+  activeSegmentKey: string | null;
+  downloadingSegmentKey: string | null;
+  isPlaying: boolean;
+  playLabel: string;
+  pauseLabel: string;
+  downloadLabel: string;
+  onPlaySegment: (key: string, startSeconds: number, endSeconds: number) => void;
+  onDownloadSegment: (key: string, speaker: string, timestamp: string, startSeconds: number, endSeconds: number) => void;
+};
+
+function TranscriptDocument({
+  markdown,
+  youLabel,
+  audioAvailable,
+  durationSeconds,
+  activeSegmentKey,
+  downloadingSegmentKey,
+  isPlaying,
+  playLabel,
+  pauseLabel,
+  downloadLabel,
+  onPlaySegment,
+  onDownloadSegment,
+}: TranscriptDocumentProps) {
   if (!/^\s*\*\*[^*\n]+\*\*(?:\s*\([^\n)]*\))?\s*$/m.test(markdown)) {
     return <pre className="transcript-raw">{markdown}</pre>;
   }
   const blocks = markdown.split(/(?:\r?\n){2,}/).filter((block) => block.trim());
+  const starts = blocks.map((block) => {
+    const heading = block.split(/\r?\n/).find((line) => line.trim()) || '';
+    const timestamp = heading.replace(/\*\*/g, '').match(/\((.*?)\)/)?.[1];
+    return timestamp ? parseTranscriptTimestamp(timestamp) : null;
+  });
 
   return (
     <article className="transcript-document">
@@ -93,12 +127,43 @@ function TranscriptDocument({ markdown, youLabel }: { markdown: string; youLabel
         const isSelf = rawHeading.includes('Speaker 0');
         const timestamp = rawHeading.match(/\((.*?)\)/)?.[1];
         const speaker = isSelf ? youLabel : rawHeading.split('(')[0].trim();
+        const startSeconds = starts[index];
+        const endSeconds = findTranscriptSegmentEnd(starts, index, durationSeconds);
+        const segmentKey = `${index}-${startSeconds}`;
+        const hasAudioSegment = audioAvailable
+          && startSeconds !== null
+          && Number.isFinite(endSeconds)
+          && endSeconds > startSeconds;
+        const segmentIsPlaying = activeSegmentKey === segmentKey && isPlaying;
 
         return (
           <section className="transcript-block" key={`${rawHeading}-${index}`}>
             <header>
               <strong>{speaker}</strong>
               {timestamp && <time>{timestamp}</time>}
+              {hasAudioSegment && (
+                <div className="transcript-segment-actions">
+                  <button
+                    type="button"
+                    className="transcript-segment-button"
+                    onClick={() => onPlaySegment(segmentKey, startSeconds, endSeconds)}
+                    aria-label={segmentIsPlaying ? pauseLabel : playLabel}
+                    title={segmentIsPlaying ? pauseLabel : playLabel}
+                  >
+                    {segmentIsPlaying ? <Pause /> : <Play />}
+                  </button>
+                  <button
+                    type="button"
+                    className="transcript-segment-button"
+                    onClick={() => onDownloadSegment(segmentKey, speaker, timestamp || '', startSeconds, endSeconds)}
+                    disabled={downloadingSegmentKey === segmentKey}
+                    aria-label={downloadLabel}
+                    title={downloadLabel}
+                  >
+                    {downloadingSegmentKey === segmentKey ? <Loader2 className="spin" /> : <Download />}
+                  </button>
+                </div>
+              )}
             </header>
             <p>{body.join(' ').trim()}</p>
           </section>
@@ -140,6 +205,8 @@ export default function HistoryView({
   const [playbackSource, setPlaybackSource] = useState('');
   const [audioStatus, setAudioStatus] = useState('');
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [activeSegmentKey, setActiveSegmentKey] = useState<string | null>(null);
+  const [downloadingSegmentKey, setDownloadingSegmentKey] = useState<string | null>(null);
   const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [autoProcessStep, setAutoProcessStep] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -150,6 +217,8 @@ export default function HistoryView({
   const [isImporting, setIsImporting] = useState(false);
   const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>(() => getSavedTranscriptionLanguage(language));
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const segmentEndRef = useRef<number | null>(null);
+  const decodedAudioRef = useRef<{ source: string; buffer: AudioBuffer } | null>(null);
   const autoProcessAttemptedRef = useRef<string | null>(null);
 
   const selected = recordings.find((recording) => recording.id === selectedId);
@@ -231,6 +300,10 @@ export default function HistoryView({
     setAudioDuration(0);
     setPlaybackSource('');
     setAudioStatus('');
+    setActiveSegmentKey(null);
+    setDownloadingSegmentKey(null);
+    segmentEndRef.current = null;
+    decodedAudioRef.current = null;
 
     if (!selected || selected.hasAudio === false) return () => undefined;
 
@@ -315,11 +388,80 @@ export default function HistoryView({
       return;
     }
     try {
+      segmentEndRef.current = null;
+      setActiveSegmentKey(null);
       await audio.play();
       setAudioStatus('');
     } catch (error: unknown) {
       setIsPlaying(false);
       setAudioStatus(error instanceof Error ? error.message : t('history', 'audioFailed'));
+    }
+  };
+
+  const playTranscriptSegment = async (key: string, startSeconds: number, endSeconds: number) => {
+    const audio = audioRef.current;
+    if (!audio || isAudioLoading || !playbackSource) return;
+    if (activeSegmentKey === key && !audio.paused) {
+      audio.pause();
+      return;
+    }
+
+    const canResume = activeSegmentKey === key
+      && audio.currentTime >= startSeconds
+      && audio.currentTime < endSeconds;
+    if (!canResume) audio.currentTime = startSeconds;
+    segmentEndRef.current = endSeconds;
+    setActiveSegmentKey(key);
+    try {
+      await audio.play();
+      setAudioStatus('');
+    } catch (error: unknown) {
+      setActiveSegmentKey(null);
+      segmentEndRef.current = null;
+      setAudioStatus(error instanceof Error ? error.message : t('history', 'audioFailed'));
+    }
+  };
+
+  const downloadTranscriptSegment = async (
+    key: string,
+    speaker: string,
+    timestamp: string,
+    startSeconds: number,
+    endSeconds: number,
+  ) => {
+    if (!selected || !playbackSource || downloadingSegmentKey) return;
+    setDownloadingSegmentKey(key);
+    try {
+      let decoded = decodedAudioRef.current;
+      if (!decoded || decoded.source !== playbackSource) {
+        const response = await fetch(playbackSource);
+        if (!response.ok) throw new Error(t('history', 'segmentDownloadFailed'));
+        const context = new AudioContext();
+        try {
+          const buffer = await context.decodeAudioData(await response.arrayBuffer());
+          decoded = { source: playbackSource, buffer };
+          decodedAudioRef.current = decoded;
+        } finally {
+          await context.close();
+        }
+      }
+
+      const blob = createWavSegment(decoded.buffer, startSeconds, endSeconds);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const segmentName = safeAudioSegmentName(`${selected.name}-${speaker}-${timestamp || formatDuration(startSeconds * 1000)}`);
+      anchor.href = url;
+      anchor.download = `${segmentName}.wav`;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setAudioStatus('');
+    } catch (error: unknown) {
+      setAudioStatus(error instanceof Error ? error.message : t('history', 'segmentDownloadFailed'));
+    } finally {
+      setDownloadingSegmentKey(null);
     }
   };
 
@@ -538,7 +680,11 @@ export default function HistoryView({
         src={playbackSource || undefined}
         preload="metadata"
         onCanPlay={() => setAudioStatus('')}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setActiveSegmentKey(null);
+          segmentEndRef.current = null;
+        }}
         onError={() => playbackSource && setAudioStatus(t('history', 'audioFailed'))}
         onLoadedMetadata={() => {
           const duration = audioRef.current?.duration;
@@ -546,7 +692,18 @@ export default function HistoryView({
         }}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
-        onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
+        onTimeUpdate={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          const segmentEnd = segmentEndRef.current;
+          if (segmentEnd !== null && audio.currentTime >= segmentEnd) {
+            audio.pause();
+            audio.currentTime = segmentEnd;
+            setActiveSegmentKey(null);
+            segmentEndRef.current = null;
+          }
+          setCurrentTime(audio.currentTime);
+        }}
       />
 
       <header className="detail-header">
@@ -668,7 +825,20 @@ export default function HistoryView({
                 {transcriptData.isTranscribing ? (
                   <div className="content-status"><Loader2 className="spin" /><strong>{t('history', 'transcribingStep')}</strong></div>
                 ) : transcriptData.markdown ? (
-                  <TranscriptDocument markdown={transcriptData.markdown} youLabel={t('history', 'you')} />
+                  <TranscriptDocument
+                    markdown={transcriptData.markdown}
+                    youLabel={t('history', 'you')}
+                    audioAvailable={selected.hasAudio !== false && Boolean(playbackSource)}
+                    durationSeconds={durationSeconds}
+                    activeSegmentKey={activeSegmentKey}
+                    downloadingSegmentKey={downloadingSegmentKey}
+                    isPlaying={isPlaying}
+                    playLabel={t('history', 'playSegment')}
+                    pauseLabel={t('history', 'pauseSegment')}
+                    downloadLabel={t('history', 'downloadSegment')}
+                    onPlaySegment={(key, start, end) => void playTranscriptSegment(key, start, end)}
+                    onDownloadSegment={(key, speaker, timestamp, start, end) => void downloadTranscriptSegment(key, speaker, timestamp, start, end)}
+                  />
                 ) : (
                   <div className={transcriptData.error ? 'content-status is-error' : 'content-status'}>
                     <FileText /><strong>{transcriptData.status || t('history', 'noTranscript')}</strong>

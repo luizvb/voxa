@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('recorder', {
   recordSimulated: (outputDir, seconds) => ipcRenderer.invoke('recorder:record-simulated', outputDir, seconds),
   recordingsRoot: () => ipcRenderer.invoke('recordings:root'),
   listRecordings: (input) => ipcRenderer.invoke('recordings:list', input),
+  loadRecordingMedia: (recordingId, auth = {}) => ipcRenderer.invoke('recordings:media', { recordingId, ...auth }),
   saveRecording: (recording) => ipcRenderer.invoke('recordings:save', recording),
   importTranscript: (input) => ipcRenderer.invoke('recordings:import-transcript', input),
   openRecordingsFolder: () => ipcRenderer.invoke('recordings:open-folder'),

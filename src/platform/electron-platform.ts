@@ -1,5 +1,5 @@
 import { getAuthCredentials } from './auth-token';
-import type { AnalysisInput, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
+import type { AnalysisInput, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
 
 export class ElectronPlatform implements VoxaPlatform {
   capabilities = { kind: 'electron' as const, systemAudio: true, globalShortcuts: true, widget: true, localFolder: true, nativePdf: true };
@@ -10,6 +10,19 @@ export class ElectronPlatform implements VoxaPlatform {
   async saveRecording(input: SaveRecordingInput) { return window.recorder.saveRecording({ ...input, ...(await this.auth()) }); }
   async importTranscript(input: { name: string; transcript: string }) { return window.recorder.importTranscript({ ...input, ...(await this.auth()) }); }
   async deleteRecording(id: string) { await window.recorder.deleteRecording(id, await this.auth()); }
+  async loadRecordingMedia(recording: Recording): Promise<RecordingMediaSource> {
+    const media = await window.recorder.loadRecordingMedia(recording.id, await this.auth());
+    const url = URL.createObjectURL(new Blob([media.bytes], { type: media.mimeType || 'audio/webm' }));
+    let revoked = false;
+    return {
+      url,
+      revoke() {
+        if (revoked) return;
+        revoked = true;
+        URL.revokeObjectURL(url);
+      },
+    };
+  }
   async transcribe(input: TranscriptionInput) { return window.recorder.transcribeWithDeepgram({ ...input, ...(await this.auth()) }); }
   async getTranscript(recordingId: string) { return window.recorder.getTranscript(recordingId, await this.auth()); }
   async analyze(input: AnalysisInput) { return window.recorder.analyzeWithLLM({ ...input, ...(await this.auth()) }); }

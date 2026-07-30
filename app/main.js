@@ -216,6 +216,17 @@ ipcMain.handle('recordings:list', async (_event, input = {}) => {
   }
 });
 
+ipcMain.handle('recordings:media', async (_event, input = {}) => {
+  const response = await fetchApi(`/api/recordings/${encodeURIComponent(input.recordingId)}/media`, {
+    headers: { Authorization: `Bearer ${input.authToken || ''}` }
+  });
+  if (!response.ok) throw new Error(`Could not load recording audio (${response.status}).`);
+  return {
+    bytes: Buffer.from(await response.arrayBuffer()),
+    mimeType: response.headers.get('content-type') || 'audio/webm'
+  };
+});
+
 ipcMain.handle('recordings:save', async (_event, input) => {
   const authToken = input.authToken || '';
   const userId = input.userId;
