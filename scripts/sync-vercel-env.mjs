@@ -10,6 +10,8 @@ const systemPromptFile = join(backend, 'voxa_prompt.txt');
 const vercel = process.platform === 'win32' ? 'vercel.cmd' : 'vercel';
 const productionKeys = [
   'DATABASE_URL',
+  'AZURE_SPEECH_KEY',
+  'AZURE_SPEECH_REGION',
   'DEEPGRAM_API_KEY',
   'NEON_AUTH_URL',
   'OPENROUTER_API_KEY',

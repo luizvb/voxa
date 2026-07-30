@@ -89,7 +89,7 @@ npm install
 Start the Electron app:
 ```bash
 cp .env.example .env
-# edit .env and set DEEPGRAM_API_KEY
+# edit .env and set the provider keys
 npm run dev
 ```
 
@@ -122,10 +122,11 @@ also declared in `app/schema.sql` for explicit database setup.
 
 Deploy the repository root to Vercel so the SPA and `/api` share one origin.
 Configure `VITE_NEON_AUTH_URL`, `NEON_AUTH_URL`, `DATABASE_URL`, Blob, Deepgram,
-OpenRouter, and Stripe environment variables. API requests require a Neon Auth
+OpenRouter, Microsoft Speech (`AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION`), and
+Stripe environment variables. API requests require a Neon Auth
 JWT; the server never accepts a client-provided user id.
 
-Before deploying a backend version that changes billing persistence, apply and
+Before deploying a backend version that changes persistence, apply and
 verify the repository migrations with a direct Neon connection:
 
 ```bash

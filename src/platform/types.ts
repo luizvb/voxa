@@ -17,6 +17,43 @@ export interface RecordingMediaSource {
 export interface TranscriptResult {
   markdown: string;
   speakers?: string[];
+  language?: string | null;
+  segments?: TranscriptSegment[];
+}
+
+export interface PronunciationAssessment {
+  id: string;
+  provider: 'azure';
+  locale: 'en-US';
+  recognizedText: string;
+  overallScore: number | null;
+  accuracyScore: number | null;
+  fluencyScore: number | null;
+  completenessScore: number | null;
+  prosodyScore: number | null;
+  words: Array<{
+    word: string;
+    accuracyScore: number | null;
+    errorType: string;
+    phonemes: Array<{ phoneme: string; accuracyScore: number | null }>;
+  }>;
+  createdAt: string;
+}
+
+export interface TranscriptSegment {
+  id: string;
+  position: number;
+  speaker: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  assessment?: PronunciationAssessment | null;
+}
+
+export interface PronunciationAssessmentInput {
+  recordingId: string;
+  segmentId: string;
+  audio: ArrayBuffer;
 }
 
 export type TranscriptionLanguage = 'en-US' | 'pt-BR' | 'es';
@@ -84,8 +121,9 @@ export interface VoxaPlatform {
   saveRecording(input: SaveRecordingInput): Promise<Recording>;
   importTranscript(input: { name: string; transcript: string }): Promise<Recording>;
   deleteRecording(id: string): Promise<void>;
-  transcribe(input: TranscriptionInput): Promise<{ markdown: string }>;
+  transcribe(input: TranscriptionInput): Promise<TranscriptResult>;
   getTranscript(recordingId: string): Promise<TranscriptResult | null>;
+  assessPronunciation(input: PronunciationAssessmentInput): Promise<PronunciationAssessment>;
   analyze(input: AnalysisInput): Promise<any>;
   listAnalyses(recordingId: string): Promise<AnalysisSummary[]>;
   getAnalysis(recordingId: string, analysisId?: string): Promise<any | null>;

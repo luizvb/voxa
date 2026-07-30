@@ -412,6 +412,14 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .transcript-segment-button:disabled { cursor: wait; opacity: .55; }
 .transcript-segment-button svg { width: 13px; height: 13px; }
 .transcript-block p { margin: 0; color: #343432; font-size: 14px; line-height: 1.72; overflow-wrap: anywhere; }
+.transcript-segment-content { min-width: 0; }
+.pronunciation-word { border-radius: 3px; padding: 1px 2px; color: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pronunciation-word.is-needs-work { background: #fff3bf; text-decoration-color: #d59b00; }
+.pronunciation-word.is-poor { background: #fee2e2; text-decoration-color: #c33b32; }
+.pronunciation-result { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; color: var(--text-tertiary); font-size: 10px; }
+.pronunciation-result > strong { color: var(--text-secondary); font-size: 11px; }
+.pronunciation-result > strong span { color: var(--text); font-size: 13px; }
+.pronunciation-result > div { display: flex; flex-wrap: wrap; gap: 8px 12px; }
 .transcript-divider { margin: 18px 0 6px; color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
 
 /* Analysis */

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('recorder', {
   deleteRecording: (id, auth = {}) => ipcRenderer.invoke('recordings:delete', { id, ...auth }),
   transcribeWithDeepgram: (input) => ipcRenderer.invoke('transcriptions:deepgram', input),
   getTranscript: (recordingId, auth = {}) => ipcRenderer.invoke('transcriptions:get', { recordingId, ...auth }),
+  assessPronunciation: (input) => ipcRenderer.invoke('pronunciation:assess', input),
   analyzeWithLLM: (input) => ipcRenderer.invoke('llm:analyze', typeof input === 'string' ? { recordingId: input } : input),
   listAnalyses: (recordingId, auth = {}) => ipcRenderer.invoke('llm:list-analyses', { recordingId, ...auth }),
   getAnalysis: (recordingId, analysisId, auth = {}) => ipcRenderer.invoke('llm:get-analysis', { recordingId, analysisId, ...auth }),

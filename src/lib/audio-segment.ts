@@ -78,3 +78,72 @@ export function createWavSegment(audio: AudioBuffer, startSeconds: number, endSe
 
   return new Blob([buffer], { type: 'audio/wav' });
 }
+
+function encodePcmWav(channels: Float32Array[], sampleRate: number): Blob {
+  const channelCount = channels.length;
+  const frameCount = channels[0]?.length || 0;
+  if (!channelCount || !frameCount || channels.some((channel) => channel.length !== frameCount)) {
+    throw new RangeError('The audio segment is empty.');
+  }
+  const bytesPerSample = 2;
+  const dataSize = frameCount * channelCount * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, 'WAVE');
+  writeAscii(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channelCount, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);
+  view.setUint16(32, channelCount * bytesPerSample, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeAscii(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    for (const channel of channels) {
+      const sample = Math.max(-1, Math.min(1, channel[frame] || 0));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += bytesPerSample;
+    }
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+export function createPronunciationWavSegment(
+  audio: Pick<AudioBuffer, 'length' | 'sampleRate' | 'numberOfChannels' | 'getChannelData'>,
+  startSeconds: number,
+  endSeconds: number,
+): Blob {
+  const duration = audio.length / audio.sampleRate;
+  const safeStart = Math.max(0, Math.min(duration, startSeconds));
+  const safeEnd = Math.max(safeStart, Math.min(duration, endSeconds));
+  const sourceStart = Math.floor(safeStart * audio.sampleRate);
+  const sourceEnd = Math.min(audio.length, Math.ceil(safeEnd * audio.sampleRate));
+  const sourceLength = sourceEnd - sourceStart;
+  if (sourceLength <= 0) throw new RangeError('The audio segment is empty.');
+
+  const mono = new Float32Array(sourceLength);
+  for (let channel = 0; channel < audio.numberOfChannels; channel += 1) {
+    const input = audio.getChannelData(channel);
+    for (let frame = 0; frame < sourceLength; frame += 1) {
+      mono[frame] += input[sourceStart + frame] / audio.numberOfChannels;
+    }
+  }
+
+  const targetSampleRate = 16_000;
+  const targetLength = Math.max(1, Math.round((sourceLength / audio.sampleRate) * targetSampleRate));
+  const resampled = new Float32Array(targetLength);
+  const ratio = audio.sampleRate / targetSampleRate;
+  for (let frame = 0; frame < targetLength; frame += 1) {
+    const sourcePosition = Math.min(sourceLength - 1, frame * ratio);
+    const left = Math.floor(sourcePosition);
+    const right = Math.min(sourceLength - 1, left + 1);
+    const fraction = sourcePosition - left;
+    resampled[frame] = mono[left] + ((mono[right] - mono[left]) * fraction);
+  }
+  return encodePcmWav([resampled], targetSampleRate);
+}

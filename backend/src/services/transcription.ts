@@ -36,9 +36,18 @@ export interface DeepgramUsage {
 export interface TranscriptionResult {
   provider: string;
   quality: string;
+  language: TranscriptionLanguage;
   transcript: any;
   markdown: string;
+  segments: TranscriptSegment[];
   usage: DeepgramUsage;
+}
+
+export interface TranscriptSegment {
+  speaker: string;
+  text: string;
+  startMs: number;
+  endMs: number;
 }
 
 export function createDeepgramUrl(
@@ -126,6 +135,53 @@ export function createMarkdown(transcript: any): string {
   return blocks.join("\n\n");
 }
 
+export function extractTranscriptSegments(transcript: any): TranscriptSegment[] {
+  const utterances = Array.isArray(transcript.results?.utterances)
+    ? transcript.results.utterances
+    : [];
+  if (utterances.length > 0) {
+    return utterances.flatMap((utterance: any, index: number) => {
+      const text = String(utterance?.transcript || "").trim();
+      const startSeconds = Number(utterance?.start);
+      const explicitEnd = Number(utterance?.end);
+      const nextStart = Number(utterances[index + 1]?.start);
+      const endSeconds = Number.isFinite(explicitEnd)
+        ? explicitEnd
+        : nextStart;
+      if (!text || !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) {
+        return [];
+      }
+      return [{
+        speaker: `Speaker ${utterance?.speaker ?? "unknown"}`,
+        text,
+        startMs: Math.max(0, Math.round(startSeconds * 1000)),
+        endMs: Math.max(0, Math.round(endSeconds * 1000)),
+      }];
+    });
+  }
+
+  const words = transcript.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+  if (!Array.isArray(words) || words.length === 0) return [];
+
+  const segments: TranscriptSegment[] = [];
+  let current: TranscriptSegment | null = null;
+  for (const word of words) {
+    const speaker = `Speaker ${word?.speaker ?? "unknown"}`;
+    const text = String(word?.punctuated_word || word?.word || "").trim();
+    const startMs = Math.max(0, Math.round(Number(word?.start || 0) * 1000));
+    const endMs = Math.max(startMs, Math.round(Number(word?.end || word?.start || 0) * 1000));
+    if (!text || endMs <= startMs) continue;
+    if (!current || current.speaker !== speaker) {
+      current = { speaker, text, startMs, endMs };
+      segments.push(current);
+    } else {
+      current.text = `${current.text} ${text}`;
+      current.endMs = endMs;
+    }
+  }
+  return segments;
+}
+
 export async function transcribeWithDeepgram(
   input: TranscriptionInput,
 ): Promise<TranscriptionResult> {
@@ -173,8 +229,10 @@ export async function transcribeWithDeepgram(
   return {
     provider: "deepgram",
     quality: maxQuality ? "max" : "standard",
+    language,
     transcript: body,
     markdown: createMarkdown(body),
+    segments: extractTranscriptSegments(body),
     usage: {
       durationSeconds,
       costUsd,

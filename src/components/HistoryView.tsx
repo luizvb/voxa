@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
+  AudioWaveform,
   BrainCircuit,
   CalendarDays,
   Check,
@@ -21,9 +22,9 @@ import {
   X,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
-import { platform, type AnalysisSummary, type Recording, type TranscriptionLanguage } from '../platform';
+import { platform, type AnalysisSummary, type PronunciationAssessment, type Recording, type TranscriptSegment, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
-import { createWavSegment, findTranscriptSegmentEnd, parseTranscriptTimestamp, safeAudioSegmentName } from '../lib/audio-segment';
+import { createPronunciationWavSegment, createWavSegment, findTranscriptSegmentEnd, parseTranscriptTimestamp, safeAudioSegmentName } from '../lib/audio-segment';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 import AIAnalysis from './AIAnalysis';
 
@@ -43,6 +44,8 @@ interface HistoryViewProps {
 
 type TranscriptState = {
   markdown?: string;
+  language?: string | null;
+  segments?: TranscriptSegment[];
   status?: string;
   isTranscribing: boolean;
   error?: boolean;
@@ -77,33 +80,156 @@ function formatDuration(ms: number) {
 
 type TranscriptDocumentProps = {
   markdown: string;
+  segments?: TranscriptSegment[];
   youLabel: string;
   audioAvailable: boolean;
+  pronunciationEnabled: boolean;
   durationSeconds: number;
   activeSegmentKey: string | null;
   downloadingSegmentKey: string | null;
+  assessingSegmentId: string | null;
   isPlaying: boolean;
   playLabel: string;
   pauseLabel: string;
   downloadLabel: string;
+  pronunciationLabel: string;
+  pronunciationScoreLabel: string;
+  pronunciationAccuracyLabel: string;
+  pronunciationFluencyLabel: string;
+  pronunciationCompletenessLabel: string;
+  pronunciationProsodyLabel: string;
   onPlaySegment: (key: string, startSeconds: number, endSeconds: number) => void;
   onDownloadSegment: (key: string, speaker: string, timestamp: string, startSeconds: number, endSeconds: number) => void;
+  onAssessPronunciation: (segment: TranscriptSegment) => void;
 };
+
+function normalizeSpokenWord(value: string): string {
+  return value.toLocaleLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function AssessedTranscriptText({ text, assessment }: { text: string; assessment?: PronunciationAssessment | null }) {
+  if (!assessment?.words?.length) return <>{text}</>;
+  const tokens = text.split(/(\s+|[^\p{L}\p{N}'\u2019-]+)/gu).filter(Boolean);
+  let assessmentIndex = 0;
+  return (
+    <>
+      {tokens.map((token, index) => {
+        const normalized = normalizeSpokenWord(token);
+        if (!normalized) return <span key={`${token}-${index}`}>{token}</span>;
+        let matchedIndex = assessment.words
+          .slice(assessmentIndex, assessmentIndex + 4)
+          .findIndex((word) => normalizeSpokenWord(word.word) === normalized);
+        if (matchedIndex < 0) return <span key={`${token}-${index}`}>{token}</span>;
+        matchedIndex += assessmentIndex;
+        const word = assessment.words[matchedIndex];
+        assessmentIndex = matchedIndex + 1;
+        const score = word.accuracyScore;
+        const severeError = ['Mispronunciation', 'Omission', 'Insertion'].includes(word.errorType);
+        const level = severeError || (score !== null && score < 60)
+          ? 'is-poor'
+          : word.errorType !== 'None' || (score !== null && score < 80)
+            ? 'is-needs-work'
+            : '';
+        if (!level) return <span key={`${token}-${index}`}>{token}</span>;
+        const weakPhonemes = word.phonemes
+          .filter((phoneme) => phoneme.accuracyScore !== null && phoneme.accuracyScore < 80)
+          .map((phoneme) => `/${phoneme.phoneme}/ ${Math.round(phoneme.accuracyScore || 0)}`)
+          .join(', ');
+        const title = [
+          `${word.word}: ${score === null ? '-' : `${Math.round(score)}/100`}`,
+          word.errorType !== 'None' ? word.errorType : '',
+          weakPhonemes,
+        ].filter(Boolean).join(' · ');
+        return <mark key={`${token}-${index}`} className={`pronunciation-word ${level}`} title={title}>{token}</mark>;
+      })}
+    </>
+  );
+}
 
 function TranscriptDocument({
   markdown,
+  segments,
   youLabel,
   audioAvailable,
+  pronunciationEnabled,
   durationSeconds,
   activeSegmentKey,
   downloadingSegmentKey,
+  assessingSegmentId,
   isPlaying,
   playLabel,
   pauseLabel,
   downloadLabel,
+  pronunciationLabel,
+  pronunciationScoreLabel,
+  pronunciationAccuracyLabel,
+  pronunciationFluencyLabel,
+  pronunciationCompletenessLabel,
+  pronunciationProsodyLabel,
   onPlaySegment,
   onDownloadSegment,
+  onAssessPronunciation,
 }: TranscriptDocumentProps) {
+  if (segments?.length) {
+    return (
+      <article className="transcript-document">
+        {segments.map((segment) => {
+          const speaker = segment.speaker === 'Speaker 0' ? youLabel : segment.speaker;
+          const startSeconds = segment.startMs / 1000;
+          const endSeconds = segment.endMs / 1000;
+          const timestamp = formatDuration(segment.startMs);
+          const hasAudioSegment = audioAvailable && endSeconds > startSeconds;
+          const coversWholeRecording = startSeconds <= 0.25
+            && durationSeconds > 0
+            && endSeconds >= durationSeconds - 0.5;
+          const canAssess = pronunciationEnabled
+            && hasAudioSegment
+            && endSeconds - startSeconds <= 30
+            && !coversWholeRecording;
+          const segmentIsPlaying = activeSegmentKey === segment.id && isPlaying;
+          const assessment = segment.assessment;
+          const metrics = [
+            [pronunciationAccuracyLabel, assessment?.accuracyScore],
+            [pronunciationFluencyLabel, assessment?.fluencyScore],
+            [pronunciationCompletenessLabel, assessment?.completenessScore],
+            [pronunciationProsodyLabel, assessment?.prosodyScore],
+          ].filter((metric): metric is [string, number] => typeof metric[1] === 'number');
+          return (
+            <section className="transcript-block" key={segment.id}>
+              <header>
+                <strong>{speaker}</strong>
+                <time>{timestamp}</time>
+                {hasAudioSegment && (
+                  <div className="transcript-segment-actions">
+                    <button type="button" className="transcript-segment-button" onClick={() => onPlaySegment(segment.id, startSeconds, endSeconds)} aria-label={segmentIsPlaying ? pauseLabel : playLabel} title={segmentIsPlaying ? pauseLabel : playLabel}>
+                      {segmentIsPlaying ? <Pause /> : <Play />}
+                    </button>
+                    <button type="button" className="transcript-segment-button" onClick={() => onDownloadSegment(segment.id, speaker, timestamp, startSeconds, endSeconds)} disabled={downloadingSegmentKey === segment.id} aria-label={downloadLabel} title={downloadLabel}>
+                      {downloadingSegmentKey === segment.id ? <Loader2 className="spin" /> : <Download />}
+                    </button>
+                    {canAssess && (
+                      <button type="button" className="transcript-segment-button" onClick={() => onAssessPronunciation(segment)} disabled={assessingSegmentId === segment.id} aria-label={pronunciationLabel} title={pronunciationLabel}>
+                        {assessingSegmentId === segment.id ? <Loader2 className="spin" /> : <AudioWaveform />}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </header>
+              <div className="transcript-segment-content">
+                <p><AssessedTranscriptText text={segment.text} assessment={assessment} /></p>
+                {assessment && (
+                  <div className="pronunciation-result">
+                    <strong>{pronunciationScoreLabel} <span>{assessment.overallScore === null ? '-' : `${Math.round(assessment.overallScore)}/100`}</span></strong>
+                    {metrics.length > 0 && <div>{metrics.map(([label, score]) => <span key={label}>{label} {Math.round(score)}</span>)}</div>}
+                  </div>
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </article>
+    );
+  }
   if (!/^\s*\*\*[^*\n]+\*\*(?:\s*\([^\n)]*\))?\s*$/m.test(markdown)) {
     return <pre className="transcript-raw">{markdown}</pre>;
   }
@@ -207,6 +333,7 @@ export default function HistoryView({
   const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [activeSegmentKey, setActiveSegmentKey] = useState<string | null>(null);
   const [downloadingSegmentKey, setDownloadingSegmentKey] = useState<string | null>(null);
+  const [assessingSegmentId, setAssessingSegmentId] = useState<string | null>(null);
   const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [autoProcessStep, setAutoProcessStep] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -260,6 +387,8 @@ export default function HistoryView({
         const result = await platform.getTranscript(selected.id);
         setTranscriptData({
           markdown: result?.markdown || '',
+          language: result?.language,
+          segments: result?.segments,
           isTranscribing: false,
           status: t('history', 'transcriptSaved'),
         });
@@ -302,6 +431,7 @@ export default function HistoryView({
     setAudioStatus('');
     setActiveSegmentKey(null);
     setDownloadingSegmentKey(null);
+    setAssessingSegmentId(null);
     segmentEndRef.current = null;
     decodedAudioRef.current = null;
 
@@ -351,7 +481,7 @@ export default function HistoryView({
 
       try {
         const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
-        setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
+        setTranscriptData({ markdown: result.markdown, language: result.language, segments: result.segments, isTranscribing: false, status: t('history', 'transcriptSaved') });
         await loadRecordings();
 
         setAutoProcessStep(t('history', 'analyzingStep'));
@@ -422,6 +552,23 @@ export default function HistoryView({
     }
   };
 
+  const getDecodedRecordingAudio = async () => {
+    if (!playbackSource) throw new Error(t('history', 'segmentDownloadFailed'));
+    let decoded = decodedAudioRef.current;
+    if (decoded?.source === playbackSource) return decoded.buffer;
+    const response = await fetch(playbackSource);
+    if (!response.ok) throw new Error(t('history', 'segmentDownloadFailed'));
+    const context = new AudioContext();
+    try {
+      const buffer = await context.decodeAudioData(await response.arrayBuffer());
+      decoded = { source: playbackSource, buffer };
+      decodedAudioRef.current = decoded;
+      return buffer;
+    } finally {
+      await context.close();
+    }
+  };
+
   const downloadTranscriptSegment = async (
     key: string,
     speaker: string,
@@ -432,21 +579,8 @@ export default function HistoryView({
     if (!selected || !playbackSource || downloadingSegmentKey) return;
     setDownloadingSegmentKey(key);
     try {
-      let decoded = decodedAudioRef.current;
-      if (!decoded || decoded.source !== playbackSource) {
-        const response = await fetch(playbackSource);
-        if (!response.ok) throw new Error(t('history', 'segmentDownloadFailed'));
-        const context = new AudioContext();
-        try {
-          const buffer = await context.decodeAudioData(await response.arrayBuffer());
-          decoded = { source: playbackSource, buffer };
-          decodedAudioRef.current = decoded;
-        } finally {
-          await context.close();
-        }
-      }
-
-      const blob = createWavSegment(decoded.buffer, startSeconds, endSeconds);
+      const decoded = await getDecodedRecordingAudio();
+      const blob = createWavSegment(decoded, startSeconds, endSeconds);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       const segmentName = safeAudioSegmentName(`${selected.name}-${speaker}-${timestamp || formatDuration(startSeconds * 1000)}`);
@@ -465,12 +599,40 @@ export default function HistoryView({
     }
   };
 
+  const assessTranscriptSegment = async (segment: TranscriptSegment) => {
+    if (!selected || assessingSegmentId || transcriptData.language !== 'en-US') return;
+    if (localStorage.getItem('voxa_pronunciation_consent') !== 'accepted') {
+      const accepted = window.confirm(t('history', 'pronunciationConsent'));
+      if (!accepted) return;
+      localStorage.setItem('voxa_pronunciation_consent', 'accepted');
+    }
+    setAssessingSegmentId(segment.id);
+    try {
+      const decoded = await getDecodedRecordingAudio();
+      const clip = createPronunciationWavSegment(decoded, segment.startMs / 1000, segment.endMs / 1000);
+      const assessment = await platform.assessPronunciation({
+        recordingId: selected.id,
+        segmentId: segment.id,
+        audio: await clip.arrayBuffer(),
+      });
+      setTranscriptData((current) => ({
+        ...current,
+        segments: current.segments?.map((item) => item.id === segment.id ? { ...item, assessment } : item),
+      }));
+      setAudioStatus('');
+    } catch (error: unknown) {
+      setAudioStatus(error instanceof Error ? error.message : t('history', 'pronunciationFailed'));
+    } finally {
+      setAssessingSegmentId(null);
+    }
+  };
+
   const handleTranscribe = async () => {
     if (!selected) return;
     setTranscriptData({ isTranscribing: true, status: t('history', 'transcribingStep') });
     try {
       const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
-      setTranscriptData({ markdown: result.markdown, isTranscribing: false, status: t('history', 'transcriptSaved') });
+      setTranscriptData({ markdown: result.markdown, language: result.language, segments: result.segments, isTranscribing: false, status: t('history', 'transcriptSaved') });
       await loadRecordings();
     } catch (error: any) {
       setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true });
@@ -827,17 +989,27 @@ export default function HistoryView({
                 ) : transcriptData.markdown ? (
                   <TranscriptDocument
                     markdown={transcriptData.markdown}
+                    segments={transcriptData.segments}
                     youLabel={t('history', 'you')}
                     audioAvailable={selected.hasAudio !== false && Boolean(playbackSource)}
+                    pronunciationEnabled={transcriptData.language === 'en-US'}
                     durationSeconds={durationSeconds}
                     activeSegmentKey={activeSegmentKey}
                     downloadingSegmentKey={downloadingSegmentKey}
+                    assessingSegmentId={assessingSegmentId}
                     isPlaying={isPlaying}
                     playLabel={t('history', 'playSegment')}
                     pauseLabel={t('history', 'pauseSegment')}
                     downloadLabel={t('history', 'downloadSegment')}
+                    pronunciationLabel={t('history', 'analyzePronunciation')}
+                    pronunciationScoreLabel={t('history', 'pronunciationScore')}
+                    pronunciationAccuracyLabel={t('history', 'pronunciationAccuracy')}
+                    pronunciationFluencyLabel={t('history', 'pronunciationFluency')}
+                    pronunciationCompletenessLabel={t('history', 'pronunciationCompleteness')}
+                    pronunciationProsodyLabel={t('history', 'pronunciationProsody')}
                     onPlaySegment={(key, start, end) => void playTranscriptSegment(key, start, end)}
                     onDownloadSegment={(key, speaker, timestamp, start, end) => void downloadTranscriptSegment(key, speaker, timestamp, start, end)}
+                    onAssessPronunciation={(segment) => void assessTranscriptSegment(segment)}
                   />
                 ) : (
                   <div className={transcriptData.error ? 'content-status is-error' : 'content-status'}>

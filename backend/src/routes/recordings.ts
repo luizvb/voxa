@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import {
   analyzeRecording,
+  assessSegmentPronunciation,
   createRecordingUploadToken,
   deleteRecording,
   getAnalysis,
@@ -32,6 +33,7 @@ router.get('/:id/status', getRecordingStatus);
 router.get('/:id/media', streamRecording);
 router.post('/:id/analyze', requireVoxaPro, analyzeRecording);
 router.get('/:id/transcript', getTranscript);
+router.post('/:id/transcript/segments/:segmentId/pronunciation', requireVoxaPro, upload.single('audio'), assessSegmentPronunciation);
 router.get('/:id/analyses', listAnalyses);
 router.get('/:id/analyses/:analysisId', getAnalysisById);
 router.get('/:id/analysis', getAnalysis);

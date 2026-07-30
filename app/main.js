@@ -405,6 +405,25 @@ ipcMain.handle('transcriptions:get', async (_event, input) => {
   return response.json();
 });
 
+ipcMain.handle('pronunciation:assess', async (_event, input) => {
+  const form = new FormData();
+  form.append('audio', new Blob([input.audio], { type: 'audio/wav' }), 'segment.wav');
+  const response = await fetchApi(
+    `/api/recordings/${encodeURIComponent(input.recordingId)}/transcript/segments/${encodeURIComponent(input.segmentId)}/pronunciation`,
+    {
+      method: 'POST',
+      signal: AbortSignal.timeout(60_000),
+      headers: { Authorization: `Bearer ${input.authToken || ''}` },
+      body: form
+    }
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Pronunciation assessment failed (${response.status}).`);
+  }
+  return response.json();
+});
+
 ipcMain.handle('llm:analyze', async (_event, input) => {
   const response = await fetchApi(`/api/recordings/${input.recordingId}/analyze`, {
     method: 'POST',

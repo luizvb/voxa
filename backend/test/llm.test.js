@@ -35,6 +35,37 @@ test('analysis prompt keeps narrative in the platform language and evidence verb
   }
 });
 
+test('saved pronunciation evidence is available only to the language lens', () => {
+  const pronunciationEvidence = [{
+    assessmentId: 'assessment-1',
+    segmentId: 'segment-1',
+    speaker: 'Speaker 0',
+    text: 'Hello world.',
+    startMs: 100,
+    endMs: 1200,
+    overallScore: 74,
+    accuracyScore: 68,
+    fluencyScore: 82,
+    completenessScore: 100,
+    prosodyScore: 71,
+    weakWords: [{ word: 'world', accuracyScore: 55, errorType: 'Mispronunciation' }],
+  }];
+  const languagePrompt = buildAnalysisPrompt('**Speaker 0** (00:00)\nHello world.', {
+    modes: ['language'],
+    pronunciationEvidence,
+  });
+  assert.match(languagePrompt, /TRUSTED PRONUNCIATION ASSESSMENTS/);
+  assert.match(languagePrompt, /assessment-1/);
+  assert.match(languagePrompt, /Mispronunciation/);
+  assert.match(languagePrompt, /map provider scores from 0-100 to the 0-10 intelligibility score/);
+
+  const meetingPrompt = buildAnalysisPrompt('**Speaker 0** (00:00)\nHello world.', {
+    modes: ['meeting'],
+    pronunciationEvidence,
+  });
+  assert.doesNotMatch(meetingPrompt, /assessment-1/);
+});
+
 test('speaker labels are extracted from Deepgram markdown and common pasted transcript formats', () => {
   const transcript = [
     '**Speaker 0** (00:01)',

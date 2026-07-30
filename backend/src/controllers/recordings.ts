@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import db from '../config/db';
 import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
 import { analyzeTranscriptWithOpenRouter, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
+import { assessEnglishPronunciation, inspectPronunciationWav, pronunciationAudioHash } from '../services/pronunciation';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
   await db.query(`
@@ -237,18 +238,55 @@ export const getTranscript = async (req: Request, res: Response): Promise<void> 
   try {
     const userId = req.user!.id;
     const { rows } = await db.query(`
-      SELECT t.provider, t.markdown, t.created_at
+      SELECT t.id, t.provider, t.language, t.markdown, t.created_at
       FROM transcripts t
       JOIN recordings r ON r.id = t.recording_id
       WHERE t.recording_id = $1 AND r.user_id = $2
-      ORDER BY t.created_at DESC
+      ORDER BY t.created_at DESC, t.id DESC
       LIMIT 1
     `, [req.params.id, userId]);
     if (rows.length === 0) {
       res.status(404).json({ error: 'Transcript not found' });
       return;
     }
-    res.json({ provider: rows[0].provider, markdown: rows[0].markdown, createdAt: rows[0].created_at, speakers: extractSpeakerLabels(rows[0].markdown) });
+    const transcript = rows[0];
+    const { rows: segmentRows } = await db.query(`
+      SELECT
+        s.id, s.position, s.speaker, s.text, s.start_ms, s.end_ms,
+        latest.id AS assessment_id,
+        latest.json_data AS assessment_data,
+        latest.created_at AS assessment_created_at
+      FROM transcript_segments s
+      LEFT JOIN LATERAL (
+        SELECT pa.id, pa.json_data, pa.created_at
+        FROM pronunciation_assessments pa
+        WHERE pa.segment_id = s.id
+        ORDER BY pa.created_at DESC, pa.id DESC
+        LIMIT 1
+      ) latest ON TRUE
+      WHERE s.transcript_id = $1
+      ORDER BY s.position
+    `, [transcript.id]);
+    res.json({
+      provider: transcript.provider,
+      language: transcript.language,
+      markdown: transcript.markdown,
+      createdAt: transcript.created_at,
+      speakers: extractSpeakerLabels(transcript.markdown),
+      segments: segmentRows.map((segment: any) => ({
+        id: segment.id,
+        position: segment.position,
+        speaker: segment.speaker,
+        text: segment.text,
+        startMs: segment.start_ms,
+        endMs: segment.end_ms,
+        assessment: segment.assessment_id ? {
+          id: segment.assessment_id,
+          ...segment.assessment_data,
+          createdAt: segment.assessment_created_at
+        } : null
+      }))
+    });
   } catch (error: any) {
     console.error('Error loading transcript:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
@@ -419,22 +457,32 @@ async function runTranscription(recording: any, userId: string, maxQuality: bool
       language,
       maxQuality
     });
-    await db.query('BEGIN');
+    const client = await db.pool.connect();
     try {
-      await db.query(`
-        INSERT INTO transcripts (recording_id, provider, markdown)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (recording_id, provider) DO UPDATE SET markdown = EXCLUDED.markdown, created_at = NOW()
-      `, [recording.id, result.provider, result.markdown]);
-      await db.query(`
+      await client.query('BEGIN');
+      const { rows: transcriptRows } = await client.query(`
+        INSERT INTO transcripts (recording_id, provider, language, markdown)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `, [recording.id, result.provider, result.language, result.markdown]);
+      const transcriptId = transcriptRows[0].id;
+      for (const [position, segment] of result.segments.entries()) {
+        await client.query(`
+          INSERT INTO transcript_segments (transcript_id, position, speaker, text, start_ms, end_ms)
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `, [transcriptId, position, segment.speaker, segment.text, segment.startMs, segment.endMs]);
+      }
+      await client.query(`
         INSERT INTO usage_logs (user_id, resource_type, provider, quantity, estimated_cost_usd)
         VALUES ($1, 'transcription', $2, $3, $4)
       `, [userId, result.provider, result.usage.durationSeconds, result.usage.costUsd]);
-      await db.query("UPDATE recordings SET state = 'ready', processing_error = NULL WHERE id = $1 AND user_id = $2", [recording.id, userId]);
-      await db.query('COMMIT');
+      await client.query("UPDATE recordings SET state = 'ready', processing_error = NULL WHERE id = $1 AND user_id = $2", [recording.id, userId]);
+      await client.query('COMMIT');
     } catch (error) {
-      await db.query('ROLLBACK');
+      await client.query('ROLLBACK');
       throw error;
+    } finally {
+      client.release();
     }
   } catch (error) {
     await db.query("UPDATE recordings SET state = 'failed', processing_error = $3 WHERE id = $1 AND user_id = $2", [recording.id, userId, error instanceof Error ? error.message.slice(0, 500) : 'Transcription failed.']);
@@ -455,17 +503,108 @@ export const getRecordingStatus = async (req: Request, res: Response): Promise<v
   });
 };
 
+export const assessSegmentPronunciation = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.file?.buffer?.length) {
+      res.status(400).json({ error: 'A pronunciation clip is required.' });
+      return;
+    }
+    const { rows } = await db.query(`
+      SELECT s.id, s.text, s.start_ms, s.end_ms, t.language, r.duration_ms
+      FROM transcript_segments s
+      JOIN transcripts t ON t.id = s.transcript_id
+      JOIN recordings r ON r.id = t.recording_id
+      WHERE r.id = $1
+        AND r.user_id = $2
+        AND s.id = $3
+        AND t.id = (
+          SELECT current.id
+          FROM transcripts current
+          WHERE current.recording_id = r.id
+          ORDER BY current.created_at DESC, current.id DESC
+          LIMIT 1
+        )
+      LIMIT 1
+    `, [req.params.id, req.user!.id, req.params.segmentId]);
+    if (!rows.length) {
+      res.status(404).json({ error: 'Current transcript segment not found.' });
+      return;
+    }
+    const segment = rows[0];
+    if (segment.language !== 'en-US') {
+      res.status(409).json({ error: 'Pronunciation assessment is available only for English transcripts.' });
+      return;
+    }
+    const expectedDurationMs = Number(segment.end_ms) - Number(segment.start_ms);
+    if (expectedDurationMs <= 0 || expectedDurationMs > 30_000) {
+      res.status(409).json({ error: 'This transcript segment is too long for pronunciation assessment.' });
+      return;
+    }
+    const recordingDurationMs = Number(segment.duration_ms);
+    const coversWholeRecording = Number(segment.start_ms) <= 250
+      && Number.isFinite(recordingDurationMs)
+      && recordingDurationMs > 0
+      && Number(segment.end_ms) >= recordingDurationMs - 500;
+    if (coversWholeRecording) {
+      res.status(409).json({ error: 'Pronunciation assessment requires a clip shorter than the complete recording.' });
+      return;
+    }
+    const wav = inspectPronunciationWav(req.file.buffer);
+    const durationToleranceMs = Math.max(750, expectedDurationMs * 0.12);
+    if (Math.abs(wav.durationMs - expectedDurationMs) > durationToleranceMs) {
+      res.status(400).json({ error: 'The uploaded clip duration does not match this transcript segment.' });
+      return;
+    }
+    const assessment = await assessEnglishPronunciation({
+      audio: req.file.buffer,
+      referenceText: segment.text,
+    });
+    const client = await db.pool.connect();
+    let saved: any[] = [];
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(`
+        INSERT INTO pronunciation_assessments (
+          segment_id, provider, locale, reference_text, audio_sha256, json_data
+        )
+        VALUES ($1, 'azure', 'en-US', $2, $3, $4)
+        RETURNING id, created_at
+      `, [segment.id, segment.text, pronunciationAudioHash(req.file.buffer), assessment]);
+      saved = result.rows;
+      await client.query(`
+        INSERT INTO usage_logs (user_id, resource_type, provider, quantity, estimated_cost_usd)
+        VALUES ($1, 'pronunciation_assessment', 'azure', $2, 0)
+      `, [req.user!.id, wav.durationMs / 1000]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    res.status(201).json({
+      id: saved[0].id,
+      ...assessment,
+      createdAt: saved[0].created_at
+    });
+  } catch (error: any) {
+    console.error('Error assessing pronunciation:', error);
+    const isInputError = error instanceof RangeError;
+    res.status(isInputError ? 400 : 502).json({ error: error.message || 'Pronunciation assessment failed.' });
+  }
+};
+
 export const analyzeRecording = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
     const { id } = req.params;
 
     const { rows: tRows } = await db.query(`
-      SELECT t.markdown
+      SELECT t.id, t.language, t.markdown
       FROM transcripts t
       JOIN recordings r ON r.id = t.recording_id
       WHERE t.recording_id = $1 AND r.user_id = $2
-      ORDER BY t.created_at DESC
+      ORDER BY t.created_at DESC, t.id DESC
       LIMIT 1
     `, [id, userId]);
     if (tRows.length === 0) {
@@ -491,11 +630,51 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
       res.status(400).json({ error: 'Select at least one speaker found in the transcript.' });
       return;
     }
+    let pronunciationEvidence: any[] = [];
+    if (modes.includes('language') && transcript.language === 'en-US') {
+      const { rows } = await db.query(`
+        SELECT DISTINCT ON (s.id)
+          pa.id AS assessment_id,
+          s.id AS segment_id,
+          s.speaker,
+          s.text,
+          s.start_ms,
+          s.end_ms,
+          pa.json_data
+        FROM transcript_segments s
+        JOIN pronunciation_assessments pa ON pa.segment_id = s.id
+        WHERE s.transcript_id = $1
+        ORDER BY s.id, pa.created_at DESC, pa.id DESC
+      `, [transcript.id]);
+      const selected = new Set(selectedSpeakers.map((speaker) => speaker.toLocaleLowerCase()));
+      pronunciationEvidence = rows
+        .filter((row: any) => !selected.size || selected.has(String(row.speaker).toLocaleLowerCase()))
+        .map((row: any) => ({
+          assessmentId: row.assessment_id,
+          segmentId: row.segment_id,
+          speaker: row.speaker,
+          text: row.text,
+          startMs: row.start_ms,
+          endMs: row.end_ms,
+          overallScore: row.json_data?.overallScore ?? null,
+          accuracyScore: row.json_data?.accuracyScore ?? null,
+          fluencyScore: row.json_data?.fluencyScore ?? null,
+          completenessScore: row.json_data?.completenessScore ?? null,
+          prosodyScore: row.json_data?.prosodyScore ?? null,
+          weakWords: Array.isArray(row.json_data?.words)
+            ? row.json_data.words
+              .filter((word: any) => word?.errorType !== 'None' || (typeof word?.accuracyScore === 'number' && word.accuracyScore < 80))
+              .slice(0, 12)
+              .map((word: any) => ({ word: word.word, accuracyScore: word.accuracyScore, errorType: word.errorType }))
+            : []
+        }));
+    }
     const analysisResult = await analyzeTranscriptWithOpenRouter(apiKey, transcript.markdown, model, {
       modes,
       outputLanguage,
       context,
-      selectedSpeakers: selectedSpeakers.length ? selectedSpeakers : undefined
+      selectedSpeakers: selectedSpeakers.length ? selectedSpeakers : undefined,
+      pronunciationEvidence
     });
     
     await db.query(`

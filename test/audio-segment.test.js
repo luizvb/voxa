@@ -38,6 +38,37 @@ test('WAV export contains only the requested interleaved audio frames', async ()
   assert.equal(view.getInt16(46, true), 16383);
 });
 
+test('pronunciation WAV export downmixes and resamples only the requested clip', async () => {
+  const { createPronunciationWavSegment } = await import('../src/lib/audio-segment.ts');
+  const sampleRate = 48000;
+  const length = sampleRate;
+  const channels = [
+    Float32Array.from({ length }, (_, index) => index / length),
+    Float32Array.from({ length }, (_, index) => -(index / length)),
+  ];
+  const audio = {
+    length,
+    sampleRate,
+    numberOfChannels: 2,
+    getChannelData(channel) { return channels[channel]; },
+  };
+  const wav = createPronunciationWavSegment(audio, 0.25, 0.75);
+  const view = new DataView(await wav.arrayBuffer());
+  assert.equal(view.getUint16(22, true), 1);
+  assert.equal(view.getUint32(24, true), 16000);
+  assert.equal(view.getUint16(34, true), 16);
+  assert.equal(view.getUint32(40, true), 16000);
+});
+
+test('English transcript segments expose saved pronunciation assessment controls', () => {
+  const history = require('node:fs').readFileSync('src/components/HistoryView.tsx', 'utf8');
+  const routes = require('node:fs').readFileSync('backend/src/routes/recordings.ts', 'utf8');
+  assert.match(history, /transcriptData\.language === 'en-US'/);
+  assert.match(history, /createPronunciationWavSegment/);
+  assert.match(history, /platform\.assessPronunciation/);
+  assert.match(routes, /requireVoxaPro, upload\.single\('audio'\), assessSegmentPronunciation/);
+});
+
 test('conversation UI exposes segment playback and download only for timed audio', () => {
   const history = require('node:fs').readFileSync('src/components/HistoryView.tsx', 'utf8');
   const electron = require('node:fs').readFileSync('src/platform/electron-platform.ts', 'utf8');

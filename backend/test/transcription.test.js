@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { createDeepgramUrl, createMarkdown, normalizeTranscriptionLanguage } = require('../dist/services/transcription');
+const { createDeepgramUrl, createMarkdown, extractTranscriptSegments, normalizeTranscriptionLanguage } = require('../dist/services/transcription');
 
 test('Deepgram URL uses only the current diarization model parameter', () => {
   const url = new URL(createDeepgramUrl());
@@ -54,4 +54,15 @@ test('utterance markdown merges adjacent fragments from the same speaker into st
   assert.equal((markdown.match(/\*\*Speaker 1\*\*/g) || []).length, 1);
   assert.match(markdown, /Bom dia\. Vamos começar\./);
   assert.match(markdown, /Combinado\. Eu envio amanhã\./);
+});
+
+test('utterance segments preserve exact provider boundaries for audio assessment', () => {
+  const segments = extractTranscriptSegments({ results: { utterances: [
+    { speaker: 0, start: 0.125, end: 1.75, transcript: 'Hello there.' },
+    { speaker: 0, start: 1.8, end: 3.025, transcript: 'How are you?' },
+  ] } });
+  assert.deepEqual(segments, [
+    { speaker: 'Speaker 0', text: 'Hello there.', startMs: 125, endMs: 1750 },
+    { speaker: 'Speaker 0', text: 'How are you?', startMs: 1800, endMs: 3025 },
+  ]);
 });
