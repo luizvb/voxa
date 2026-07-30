@@ -88,7 +88,7 @@ export function parseAzurePronunciationResponse(body: any): PronunciationAssessm
   }
   const best = body?.NBest?.[0];
   if (!best) throw new Error('Microsoft Speech returned no pronunciation hypothesis.');
-  const assessment = best.PronunciationAssessment || {};
+  const assessment = best.PronunciationAssessment || best;
   return {
     provider: 'azure',
     locale: 'en-US',
@@ -98,15 +98,21 @@ export function parseAzurePronunciationResponse(body: any): PronunciationAssessm
     fluencyScore: boundedScore(assessment.FluencyScore),
     completenessScore: boundedScore(assessment.CompletenessScore),
     prosodyScore: boundedScore(assessment.ProsodyScore),
-    words: Array.isArray(best.Words) ? best.Words.map((word: any) => ({
-      word: String(word?.Word || '').trim(),
-      accuracyScore: boundedScore(word?.PronunciationAssessment?.AccuracyScore),
-      errorType: String(word?.PronunciationAssessment?.ErrorType || 'None'),
-      phonemes: Array.isArray(word?.Phonemes) ? word.Phonemes.map((phoneme: any) => ({
-        phoneme: String(phoneme?.Phoneme || '').trim(),
-        accuracyScore: boundedScore(phoneme?.PronunciationAssessment?.AccuracyScore),
-      })).filter((phoneme: any) => phoneme.phoneme) : [],
-    })).filter((word: PronunciationWord) => word.word) : [],
+    words: Array.isArray(best.Words) ? best.Words.map((word: any) => {
+      const wordAssessment = word?.PronunciationAssessment || word || {};
+      return {
+        word: String(word?.Word || '').trim(),
+        accuracyScore: boundedScore(wordAssessment.AccuracyScore),
+        errorType: String(wordAssessment.ErrorType || 'None'),
+        phonemes: Array.isArray(word?.Phonemes) ? word.Phonemes.map((phoneme: any) => {
+          const phonemeAssessment = phoneme?.PronunciationAssessment || phoneme || {};
+          return {
+            phoneme: String(phoneme?.Phoneme || '').trim(),
+            accuracyScore: boundedScore(phonemeAssessment.AccuracyScore),
+          };
+        }).filter((phoneme: any) => phoneme.phoneme) : [],
+      };
+    }).filter((word: PronunciationWord) => word.word) : [],
   };
 }
 

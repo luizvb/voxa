@@ -44,16 +44,15 @@ test('Azure detailed response is normalized without inventing missing scores', (
     RecognitionStatus: 'Success',
     NBest: [{
       Display: 'Hello world.',
-      PronunciationAssessment: {
-        PronScore: 73.4,
-        AccuracyScore: 70,
-        FluencyScore: 82,
-        CompletenessScore: 100,
-      },
+      PronScore: 73.4,
+      AccuracyScore: 70,
+      FluencyScore: 82,
+      CompletenessScore: 100,
       Words: [{
         Word: 'Hello',
-        PronunciationAssessment: { AccuracyScore: 55, ErrorType: 'Mispronunciation' },
-        Phonemes: [{ Phoneme: 'h', PronunciationAssessment: { AccuracyScore: 48 } }],
+        AccuracyScore: 55,
+        ErrorType: 'Mispronunciation',
+        Phonemes: [{ Phoneme: 'h', AccuracyScore: 48 }],
       }],
     }],
   });
@@ -69,6 +68,24 @@ test('Azure detailed response is normalized without inventing missing scores', (
     RecognitionStatus: 'Success',
     NBest: [{ Display: 'Hello.', PronunciationAssessment: { PronScore: null }, Words: [] }],
   }).overallScore, null);
+});
+
+test('Azure parser remains compatible with nested SDK-style assessment fields', () => {
+  const result = parseAzurePronunciationResponse({
+    RecognitionStatus: 'Success',
+    NBest: [{
+      Display: 'Hello.',
+      PronunciationAssessment: { PronScore: 88, AccuracyScore: 86 },
+      Words: [{
+        Word: 'Hello',
+        PronunciationAssessment: { AccuracyScore: 84, ErrorType: 'None' },
+        Phonemes: [{ Phoneme: 'h', PronunciationAssessment: { AccuracyScore: 82 } }],
+      }],
+    }],
+  });
+  assert.equal(result.overallScore, 88);
+  assert.equal(result.words[0].accuracyScore, 84);
+  assert.equal(result.words[0].phonemes[0].accuracyScore, 82);
 });
 
 test('Azure request sends the reference text and only the supplied WAV clip', async () => {
