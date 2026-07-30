@@ -82,3 +82,34 @@ test('PDF report reads the structured v5 executive insight fields', () => {
   assert.match(html, /Speed versus evidence/);
   assert.match(html, /The operating model becomes reusable/);
 });
+
+test('PDF report prints reused evidence as references and the quote once in the catalog', () => {
+  const quote = 'I led the staged rollout with three teams';
+  const reference = { citationId: 'E001', turnId: 'T002', speaker: 'Candidate', quote };
+  const html = buildAnalysisReportHtml({
+    locale: 'pt-BR',
+    recording: { name: 'Entrevista' },
+    analysis: {
+      version: '6.0',
+      analysisModes: ['interview'],
+      summary: {
+        title: 'Entrevista',
+        executiveBrief: { statement: 'Síntese.' },
+        bottomLine: { statement: 'Há evidência de liderança.', evidence: [reference] },
+        criticalFindings: [{ finding: 'Liderança', significance: 'Relevante.', businessImpact: 'Execução.', evidence: [reference] }]
+      },
+      evidenceQuality: {
+        level: 'high',
+        evidenceCatalog: [reference],
+        transcriptionUncertainties: []
+      },
+      interview: {
+        executiveAssessment: { overallScore: 8, evidenceSignal: 'strong', rationale: 'Evidência específica.', evidence: [reference] },
+        strengths: [], concerns: [], competencies: [], questionReviews: [], coaching: { priorities: [], candidateQuestions: [], practiceQuestions: [] }
+      }
+    }
+  });
+  assert.equal(html.split(quote).length - 1, 1);
+  assert.ok((html.match(/E001/g) || []).length >= 4);
+  assert.match(html, /Catálogo de evidências/);
+});

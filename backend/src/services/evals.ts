@@ -103,7 +103,7 @@ export function promptSnapshot(config: EvalRunConfig = normalizeEvalConfig({})) 
   return { snapshot, hash: createHash('sha256').update(snapshot).digest('hex') };
 }
 
-function collectEvidence(value: unknown, output: Array<{ speaker?: string; quote: string }> = []): Array<{ speaker?: string; quote: string }> {
+function collectEvidence(value: unknown, output: Array<{ speaker?: string; quote: string; citationId?: string }> = []): Array<{ speaker?: string; quote: string; citationId?: string }> {
   if (Array.isArray(value)) value.forEach((item) => collectEvidence(item, output));
   else if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) {
@@ -111,7 +111,7 @@ function collectEvidence(value: unknown, output: Array<{ speaker?: string; quote
         const items = Array.isArray(child) ? child : child ? [child] : [];
         for (const item of items) {
           if (typeof item === 'string') output.push({ quote: item });
-          else if (item && typeof item === 'object' && typeof (item as any).quote === 'string') output.push({ speaker: (item as any).speaker, quote: (item as any).quote });
+          else if (item && typeof item === 'object' && typeof (item as any).quote === 'string') output.push({ speaker: (item as any).speaker, quote: (item as any).quote, citationId: (item as any).citationId });
         }
       } else collectEvidence(child, output);
     }
@@ -168,7 +168,7 @@ export function runDeterministicChecks(analysis: any, scenario: EvalScenario): D
   const expectedKeys = ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting'];
   const actualKeys = analysis && typeof analysis === 'object' ? Object.keys(analysis) : [];
   const schemaValid = expectedKeys.length === actualKeys.length && expectedKeys.every((key, index) => actualKeys[index] === key);
-  push('schema', 'Exact v5 analysis schema', schemaValid && analysis?.version === '5.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
+  push('schema', 'Exact v6 analysis schema', schemaValid && analysis?.version === '6.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
   const selectedExactly = Array.isArray(analysis?.analysisModes) && analysis.analysisModes.length === 1 && analysis.analysisModes[0] === scenario.mode;
   push('selected-mode', 'Selected mode is exact', selectedExactly, 'critical', `Expected only ${scenario.mode}.`);
   const modeObjects: Record<AnalysisMode, string> = { interview: 'interview', language: 'languageClass', meeting: 'meeting' };
@@ -188,6 +188,18 @@ export function runDeterministicChecks(analysis: any, scenario: EvalScenario): D
   const evidenceItems = collectEvidence(analysis);
   const unsupported = evidenceItems.filter((item) => !quoteAppearsInTranscript(item.quote, scenario.transcript));
   push('evidence-grounding', 'Evidence quotes are exact transcript spans', unsupported.length === 0, 'critical', unsupported.length ? `${unsupported.length} of ${evidenceItems.length} quote(s) are unsupported.` : `${evidenceItems.length} exact quote(s) inspected.`);
+  const citationSummary = analysis?.evidenceQuality?.citationSummary || {};
+  const evidenceCatalog = Array.isArray(analysis?.evidenceQuality?.evidenceCatalog) ? analysis.evidenceQuality.evidenceCatalog : [];
+  const uniqueCatalogIds = new Set(evidenceCatalog.map((item: any) => item?.citationId).filter(Boolean));
+  const citedEvidence = evidenceItems.filter((item: any) => (item as any).citationId);
+  const transparentReuse = citationSummary.totalReferences === evidenceItems.length
+    && citationSummary.uniqueCitations === evidenceCatalog.length
+    && citationSummary.repeatedReferences === Math.max(0, evidenceItems.length - evidenceCatalog.length)
+    && uniqueCatalogIds.size === evidenceCatalog.length
+    && citedEvidence.length === evidenceItems.length;
+  push('citation-ledger', 'Citation reuse is explicit and catalogued once', transparentReuse, 'critical', transparentReuse ? `${evidenceCatalog.length} unique citation(s), ${evidenceItems.length} reference(s), ${citationSummary.repeatedReferences} repeated reference(s).` : 'Citation summary, references, or unique catalog are inconsistent.');
+  const reuseRatio = Number(citationSummary.reuseRatio || 0);
+  push('citation-diversity', 'Evidence reuse stays below the inflation threshold', reuseRatio <= 0.6, 'major', `${Math.round(reuseRatio * 100)}% of evidence references reuse an existing citation.`);
 
   const claims = claimItemsForMode(analysis, scenario.mode);
   const claimsWithoutEvidence = claims.filter((item: any) => !Array.isArray(item?.evidence) || item.evidence.length === 0);

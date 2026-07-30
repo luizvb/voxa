@@ -1,9 +1,17 @@
 import AIAnalysis from './AIAnalysis';
 
-const evidence = (speaker: string, quote: string) => [{ speaker, quote }];
+const previewEvidenceCatalog: Array<{ citationId: string; turnId: string; speaker: string; quote: string }> = [];
+const evidence = (speaker: string, quote: string) => {
+  let citation = previewEvidenceCatalog.find((item) => item.speaker === speaker && item.quote === quote);
+  if (!citation) {
+    citation = { citationId: `E${String(previewEvidenceCatalog.length + 1).padStart(3, '0')}`, turnId: `T${String(previewEvidenceCatalog.length + 1).padStart(3, '0')}`, speaker, quote };
+    previewEvidenceCatalog.push(citation);
+  }
+  return [{ ...citation }];
+};
 
 const sample = {
-  version: '5.0',
+  version: '6.0',
   analysisModes: ['interview', 'language', 'meeting'],
   summary: {
     title: 'Product migration review',
@@ -63,6 +71,38 @@ const sample = {
   },
 };
 
+const previewReferenceCount = (() => {
+  let count = 0;
+  const visit = (value: any) => {
+    if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === 'object') {
+      Object.entries(value).forEach(([key, child]) => {
+        if (key === 'evidence' && Array.isArray(child)) count += child.length;
+        else visit(child);
+      });
+    }
+  };
+  visit(sample);
+  return count;
+})();
+Object.assign(sample.evidenceQuality, {
+  citationSummary: {
+    totalReferences: previewReferenceCount,
+    uniqueCitations: previewEvidenceCatalog.length,
+    repeatedReferences: previewReferenceCount - previewEvidenceCatalog.length,
+    reuseRatio: Number(((previewReferenceCount - previewEvidenceCatalog.length) / previewReferenceCount).toFixed(3))
+  },
+  evidenceCatalog: previewEvidenceCatalog,
+  transcriptionUncertainties: [{
+    turnId: 'T018',
+    original: 'styles company',
+    probableReading: 'Styled Components',
+    confidence: 'medium',
+    rationale: 'The surrounding React styling context supports a probable technical-name transcription.',
+    affectsAssessment: false
+  }]
+});
+
 export default function InsightsPreview() {
-  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the structured v4 report.</p></header><AIAnalysis analysis={sample} /></main>;
+  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the structured v6 report.</p></header><AIAnalysis analysis={sample} /></main>;
 }

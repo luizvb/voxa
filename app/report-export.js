@@ -28,9 +28,9 @@ const DETAIL_COPY = {
 };
 
 const SUMMARY_COPY = {
-  en: { purpose: 'Purpose', keyPoints: 'Key points', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', businessImpact: 'Business impact', recommendedActions: 'Recommended actions', expectedOutcome: 'Expected outcome', executiveQuestions: 'Questions that constrain the decision', managementAttention: 'Management attention', tensions: 'Tensions and trade-offs', strategicImplications: 'Strategic implications' },
-  pt: { purpose: 'Objetivo', keyPoints: 'Pontos principais', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', businessImpact: 'Impacto no negócio', recommendedActions: 'Ações recomendadas', expectedOutcome: 'Resultado esperado', executiveQuestions: 'Perguntas que limitam a decisão', managementAttention: 'Atenção da liderança', tensions: 'Tensões e trade-offs', strategicImplications: 'Implicações estratégicas' },
-  es: { purpose: 'Objetivo', keyPoints: 'Puntos principales', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', businessImpact: 'Impacto en el negocio', recommendedActions: 'Acciones recomendadas', expectedOutcome: 'Resultado esperado', executiveQuestions: 'Preguntas que limitan la decisión', managementAttention: 'Atención de la dirección', tensions: 'Tensiones y trade-offs', strategicImplications: 'Implicaciones estratégicas' },
+  en: { purpose: 'Purpose', keyPoints: 'Key points', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', businessImpact: 'Business impact', recommendedActions: 'Recommended actions', expectedOutcome: 'Expected outcome', executiveQuestions: 'Questions that constrain the decision', managementAttention: 'Management attention', tensions: 'Tensions and trade-offs', strategicImplications: 'Strategic implications', evidenceCatalog: 'Evidence catalog', transcriptionUncertainties: 'Transcription uncertainties' },
+  pt: { purpose: 'Objetivo', keyPoints: 'Pontos principais', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', businessImpact: 'Impacto no negócio', recommendedActions: 'Ações recomendadas', expectedOutcome: 'Resultado esperado', executiveQuestions: 'Perguntas que limitam a decisão', managementAttention: 'Atenção da liderança', tensions: 'Tensões e trade-offs', strategicImplications: 'Implicações estratégicas', evidenceCatalog: 'Catálogo de evidências', transcriptionUncertainties: 'Incertezas de transcrição' },
+  es: { purpose: 'Objetivo', keyPoints: 'Puntos principales', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', businessImpact: 'Impacto en el negocio', recommendedActions: 'Acciones recomendadas', expectedOutcome: 'Resultado esperado', executiveQuestions: 'Preguntas que limitan la decisión', managementAttention: 'Atención de la dirección', tensions: 'Tensiones y trade-offs', strategicImplications: 'Implicaciones estratégicas', evidenceCatalog: 'Catálogo de evidencias', transcriptionUncertainties: 'Incertidumbres de transcripción' },
 };
 
 function languageFor(locale) { return String(locale || '').toLowerCase().startsWith('pt') ? 'pt' : String(locale || '').toLowerCase().startsWith('es') ? 'es' : 'en'; }
@@ -44,11 +44,23 @@ function list(items, mapper = (item) => item, empty = 'No grounded items identif
 function evidence(items, copy) {
   const valid = array(items).filter((item) => item && (typeof item === 'string' || item.quote));
   if (!valid.length) return '';
+  if (valid.every((item) => typeof item === 'object' && item.citationId)) {
+    return `<div class="evidence evidence-refs"><small>${escapeHtml(copy.evidence)}</small><p>${valid.map((item) => `<b>${text(item.citationId)}</b>${item.turnId ? ` · ${text(item.turnId)}` : ''}`).join(' &nbsp; ')}</p></div>`;
+  }
   return `<div class="evidence"><small>${escapeHtml(copy.evidence)}</small>${valid.map((item) => {
     const quote = typeof item === 'string' ? item : item.quote;
     const speaker = typeof item === 'object' ? item.speaker : '';
     return `<blockquote>${speaker ? `<b>${text(speaker)}</b>` : ''}<span>${text(quote)}</span></blockquote>`;
   }).join('')}</div>`;
+}
+
+function buildEvidenceCatalog(quality, copy) {
+  const catalog = array(quality?.evidenceCatalog);
+  const uncertainties = array(quality?.transcriptionUncertainties);
+  if (!catalog.length && !uncertainties.length) return '';
+  const citations = catalog.map((item) => `<article><header><b>${text(item.citationId)}</b><span>${text(item.turnId, '')}</span><strong>${text(item.speaker)}</strong></header><p>“${text(item.quote)}”</p></article>`).join('');
+  const transcription = uncertainties.length ? `<h3>${copy.transcriptionUncertainties}</h3>${uncertainties.map((item) => `<article><header><b>${text(item.turnId, '')}</b><strong>${text(item.confidence)}</strong></header><p><del>${text(item.original)}</del> → <b>${text(item.probableReading)}</b></p><p class="note">${text(item.rationale)}</p></article>`).join('')}` : '';
+  return section(copy.evidenceCatalog, `<div class="catalog">${citations}</div>${transcription}`, 'mode-section evidence-appendix');
 }
 
 function section(title, body, className = '') { return `<section class="section ${className}"><h2>${escapeHtml(title)}</h2>${body}</section>`; }
@@ -150,6 +162,8 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
     .manager, .lesson-brief { margin-bottom: 8mm; padding: 0 0 6mm; border-bottom: 1px solid #c9cbc7; }
     .note, .muted { color: #747772; } .tag { display: inline-block; padding: 0; color: #686b66; font-size: 7px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .evidence { clear: both; margin-top: 4mm; } .evidence blockquote { display: grid; grid-template-columns: auto 1fr; gap: 6px; margin: 2mm 0 0; border-left: 1px solid #aeb1ac; padding: 1mm 0 1mm 3mm; color: #626560; font-family: Georgia, "Times New Roman", serif; font-size: 8.5px; } .evidence blockquote b { float: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 7.5px; }
+    .evidence-refs p { color: #59665b; font: 7.5px ui-monospace, "SFMono-Regular", Menlo, monospace; } .evidence-refs b { color: #304937; }
+    .catalog { columns: 2; column-gap: 8mm; } .catalog article { break-inside: avoid; } .catalog header, .evidence-appendix article header { display: flex; gap: 3mm; color: #70736e; font-size: 7px; } .catalog header strong, .evidence-appendix article header strong { margin-left: auto; } .catalog p { color: #555954; font-family: Georgia, "Times New Roman", serif; }
     .lesson-brief { display: grid; grid-template-columns: 1.4fr .6fr; gap: 8mm; } .lesson-brief .evidence { grid-column: 1 / -1; }
     .learner { margin-top: 5mm; } .level { min-width: 20mm; text-align: right; } .level strong { float: none; display: block; font-size: 18px; font-weight: 600; }
     .metrics { display: grid; grid-template-columns: repeat(6, 1fr); margin: 5mm 0 2mm; border-top: 1px solid #c9cbc7; border-bottom: 1px solid #c9cbc7; } .metrics div { padding: 3mm 2mm; border-right: 1px solid #e3e4e1; } .metrics div:last-child { border-right: 0; } .metrics b { display: block; margin-top: 2px; font-size: 11px; }
@@ -161,6 +175,7 @@ function buildAnalysisReportHtml({ analysis, recording, locale = 'en-US' }) {
     ${buildInterview(safe.interview, copy)}
     ${buildLanguage(safe.languageClass, safe.speakers, copy)}
     ${buildMeeting(safe.meeting, copy)}
+    ${buildEvidenceCatalog(safe.evidenceQuality, copy)}
   </body></html>`;
 }
 

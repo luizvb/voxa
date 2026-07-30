@@ -9,7 +9,7 @@ const COPY: Record<Language, Record<string, string>> = {
   en: {
     report: 'Verified conversation report', recorded: 'Recorded', generated: 'Generated', page: 'Page', of: 'of',
     evidenceQuality: 'Evidence quality', analysisModes: 'Analysis lenses', keyPoints: 'Key points', version: 'Report version',
-    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive brief', transcriptEvidence: 'Transcript evidence', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', recommendedActions: 'Recommended actions', unansweredQuestions: 'Questions that constrain the decision', missingInformation: 'Missing information',
+    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive brief', transcriptEvidence: 'Transcript evidence', evidenceCatalog: 'Evidence catalog', transcriptionUncertainties: 'Transcription uncertainties', probableReading: 'Probable reading', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', recommendedActions: 'Recommended actions', unansweredQuestions: 'Questions that constrain the decision', missingInformation: 'Missing information',
     interview: 'Interview analysis', languageClass: 'Language lesson analysis', meeting: 'Meeting analysis', lens: 'Analysis lens',
     verify: 'AI-generated analysis should be checked against the transcript. Recommendations are guidance, not transcript facts.',
     context: 'Context', executiveAssessment: 'Executive assessment', overallScore: 'Overall score', scoreConfidence: 'Score confidence', outcomeForecast: 'Directional forecast', evidenceSignal: 'Strength of observed evidence', decisionReadiness: 'Decision readiness', keyTradeoff: 'Key trade-off', rationale: 'Rationale', caveat: 'Caveat',
@@ -21,7 +21,7 @@ const COPY: Record<Language, Record<string, string>> = {
   pt: {
     report: 'Relatório verificado da conversa', recorded: 'Gravado em', generated: 'Gerado em', page: 'Página', of: 'de',
     evidenceQuality: 'Qualidade das evidências', analysisModes: 'Perspectivas de análise', keyPoints: 'Pontos principais', version: 'Versão do relatório',
-    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', transcriptEvidence: 'Evidência da transcrição', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', recommendedActions: 'Ações recomendadas', unansweredQuestions: 'Perguntas que limitam a decisão', missingInformation: 'Informações ausentes',
+    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', transcriptEvidence: 'Evidência da transcrição', evidenceCatalog: 'Catálogo de evidências', transcriptionUncertainties: 'Incertezas de transcrição', probableReading: 'Leitura provável', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', recommendedActions: 'Ações recomendadas', unansweredQuestions: 'Perguntas que limitam a decisão', missingInformation: 'Informações ausentes',
     interview: 'Análise de entrevista', languageClass: 'Análise da aula de idioma', meeting: 'Análise da reunião', lens: 'Perspectiva de análise',
     verify: 'A análise gerada por IA deve ser conferida na transcrição. Recomendações são orientações, não fatos da conversa.',
     context: 'Contexto', executiveAssessment: 'Avaliação executiva', overallScore: 'Nota geral', scoreConfidence: 'Confiança da nota', outcomeForecast: 'Expectativa direcional', evidenceSignal: 'Força das evidências observadas', decisionReadiness: 'Prontidão para decisão', keyTradeoff: 'Trade-off central', rationale: 'Justificativa', caveat: 'Ressalva',
@@ -33,7 +33,7 @@ const COPY: Record<Language, Record<string, string>> = {
   es: {
     report: 'Informe verificado de la conversación', recorded: 'Grabado', generated: 'Generado', page: 'Página', of: 'de',
     evidenceQuality: 'Calidad de la evidencia', analysisModes: 'Perspectivas de análisis', keyPoints: 'Puntos principales', version: 'Versión del informe',
-    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', transcriptEvidence: 'Evidencia de la transcripción', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', recommendedActions: 'Acciones recomendadas', unansweredQuestions: 'Preguntas que limitan la decisión', missingInformation: 'Información ausente',
+    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', transcriptEvidence: 'Evidencia de la transcripción', evidenceCatalog: 'Catálogo de evidencias', transcriptionUncertainties: 'Incertidumbres de transcripción', probableReading: 'Lectura probable', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', recommendedActions: 'Acciones recomendadas', unansweredQuestions: 'Preguntas que limitan la decisión', missingInformation: 'Información ausente',
     interview: 'Análisis de entrevista', languageClass: 'Análisis de la clase de idioma', meeting: 'Análisis de la reunión', lens: 'Perspectiva de análisis',
     verify: 'El análisis generado por IA debe verificarse con la transcripción. Las recomendaciones son orientación, no hechos de la conversación.',
     context: 'Contexto', executiveAssessment: 'Evaluación ejecutiva', overallScore: 'Puntuación general', scoreConfidence: 'Confianza de la puntuación', outcomeForecast: 'Previsión orientativa', evidenceSignal: 'Fuerza de la evidencia observada', decisionReadiness: 'Preparación para decidir', keyTradeoff: 'Trade-off central', rationale: 'Justificación', caveat: 'Salvedad',
@@ -180,6 +180,15 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
   const addEvidence = (items: unknown[]) => {
     const evidence = items.filter(isRecord).filter((item) => scalarText(item.quote, language));
     if (!evidence.length) return;
+    if (evidence.every((item) => scalarText(item.citationId, language))) {
+      const references = evidence.map((item) => {
+        const citationId = scalarText(item.citationId, language);
+        const turnId = scalarText(item.turnId, language);
+        return turnId ? `${citationId} · ${turnId}` : citationId;
+      }).join('   ');
+      addText(`${copy.transcriptEvidence.toUpperCase()}: ${references}`, { size: 7.2, bold: true, color: accent, x: marginX + 4, width: contentWidth - 8, gapAfter: 2 });
+      return;
+    }
     evidence.forEach((item) => {
       const speaker = scalarText(item.speaker, language);
       const quote = scalarText(item.quote, language);
@@ -292,6 +301,33 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
     addText(copy[key], { size: 22, bold: true, gapAfter: 8 });
     Object.entries(value).forEach(([childKey, childValue]) => renderNode(childKey, childValue));
   });
+
+  const evidenceCatalog = asArray(evidenceQuality.evidenceCatalog).filter(isRecord);
+  const transcriptionUncertainties = asArray(evidenceQuality.transcriptionUncertainties).filter(isRecord);
+  if (evidenceCatalog.length || transcriptionUncertainties.length) {
+    addPage();
+    addEyebrow(copy.transcriptEvidence);
+    addText(copy.evidenceCatalog, { size: 22, bold: true, gapAfter: 8 });
+    evidenceCatalog.forEach((item) => {
+      const citationId = scalarText(item.citationId, language);
+      const turnId = scalarText(item.turnId, language);
+      const speaker = scalarText(item.speaker, language);
+      const quote = scalarText(item.quote, language);
+      ensureSpace(measure(quote, 8.8, contentWidth) + 14);
+      addText(`${citationId}${turnId ? ` · ${turnId}` : ''}${speaker ? ` · ${speaker}` : ''}`, { size: 7.3, bold: true, color: accent, gapAfter: 1.5 });
+      addText(`“${quote}”`, { size: 8.8, color: muted, gapAfter: 4 });
+    });
+    if (transcriptionUncertainties.length) {
+      addSectionTitle(copy.transcriptionUncertainties);
+      transcriptionUncertainties.forEach((item) => {
+        const title = [scalarText(item.turnId, language), scalarText(item.confidence, language)].filter(Boolean).join(' · ');
+        const original = scalarText(item.original, language);
+        const probable = scalarText(item.probableReading, language);
+        const rationale = scalarText(item.rationale, language);
+        addPanel(title || copy.transcriptionUncertainties, `${original} → ${copy.probableReading}: ${probable}${rationale ? `\n${rationale}` : ''}`, 'muted');
+      });
+    }
+  }
 
   const pageCount = doc.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {

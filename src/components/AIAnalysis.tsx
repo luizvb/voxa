@@ -33,6 +33,15 @@ const statement = (value: any, fallback: string) => sentence(typeof value === 'o
 function Evidence({ items, label }: { items: any[]; label: string }) {
   const evidence = asArray(items).filter((item) => item?.quote || typeof item === 'string');
   if (!evidence.length) return null;
+  const cited = evidence.filter((item) => typeof item === 'object' && item.citationId);
+  if (cited.length === evidence.length) {
+    return (
+      <div className="evidence-references" aria-label={label}>
+        <Quote /><span>{label}</span>
+        {cited.map((item) => <button type="button" key={item.citationId} onClick={() => document.getElementById(`citation-${item.citationId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>{item.citationId}{item.turnId ? ` · ${item.turnId}` : ''}</button>)}
+      </div>
+    );
+  }
   return (
     <details className="evidence-disclosure">
       <summary><Quote /><span>{label}</span><b>{evidence.length}</b><ChevronDown /></summary>
@@ -44,6 +53,19 @@ function Evidence({ items, label }: { items: any[]; label: string }) {
         })}
       </div>
     </details>
+  );
+}
+
+function EvidenceCatalog({ quality, t }: { quality: any; t: any }) {
+  const catalog = asArray(quality?.evidenceCatalog);
+  const uncertainties = asArray(quality?.transcriptionUncertainties);
+  if (!catalog.length && !uncertainties.length) return null;
+  return (
+    <section className="evidence-catalog">
+      <RegisterHeading icon={Quote} title={t('ai', 'evidenceCatalog')} count={catalog.length} />
+      {!!catalog.length && <div className="evidence-catalog-list">{catalog.map((item) => <blockquote id={`citation-${item.citationId}`} key={item.citationId}><header><b>{item.citationId}</b><span>{item.turnId}</span><strong>{item.speaker}</strong></header><p>{item.quote}</p></blockquote>)}</div>}
+      {!!uncertainties.length && <div className="transcription-uncertainties"><h5><AlertTriangle />{t('ai', 'transcriptionUncertainties')}</h5>{uncertainties.map((item, index) => <article key={`${item.turnId}-${item.original}-${index}`}><header><b>{item.turnId}</b><span>{level(item.confidence)}</span></header><del>{item.original}</del><p><strong>{t('ai', 'probableReading')}:</strong> {item.probableReading}</p><small>{item.rationale}</small></article>)}</div>}
+    </section>
   );
 }
 
@@ -213,11 +235,13 @@ export default function AIAnalysis({ analysis }: AIAnalysisProps) {
   const criticalFindings = asArray(summary.criticalFindings);
   const recommendedActions = asArray(summary.recommendedActions);
   const unansweredQuestions = asArray(summary.unansweredQuestions);
+  const citationSummary = quality.citationSummary || {};
+  const hasCitationSummary = Number.isFinite(Number(citationSummary.uniqueCitations));
   return (
     <div className="analysis-view">
       <section className="analysis-hero">
         <div><span className="analysis-kicker"><ShieldCheck />{t('ai', 'verifiedReport')}</span><h3>{summary.title || t('ai', 'overview')}</h3><p>{statement(brief, fallback)}</p>{summary.purpose && <small className="analysis-purpose">{t('ai', 'purpose')}: {statement(summary.purpose, fallback)}</small>}</div>
-        <dl className="analysis-report-stats"><div><dt>{t('ai', 'evidenceQuality')}</dt><dd>{level(quality.level)}</dd></div><div><dt>{t('ai', 'analysisLenses')}</dt><dd>{modes.length}</dd></div><div><dt>{t('ai', 'keyPoints')}</dt><dd>{keyPoints.length}</dd></div><small>v{analysis.version || 'legacy'}</small></dl>
+        <dl className="analysis-report-stats"><div><dt>{t('ai', 'evidenceQuality')}</dt><dd>{level(quality.level)}</dd></div>{hasCitationSummary ? <><div><dt>{t('ai', 'uniqueCitations')}</dt><dd>{citationSummary.uniqueCitations}</dd></div><div><dt>{t('ai', 'evidenceReferences')}</dt><dd>{citationSummary.totalReferences}</dd></div><div><dt>{t('ai', 'repeatedReferences')}</dt><dd>{citationSummary.repeatedReferences}</dd></div></> : <><div><dt>{t('ai', 'analysisLenses')}</dt><dd>{modes.length}</dd></div><div><dt>{t('ai', 'keyPoints')}</dt><dd>{keyPoints.length}</dd></div></>}<small>v{analysis.version || 'legacy'}</small></dl>
       </section>
 
       {summary.bottomLine?.statement && <section className="manager-brief"><small>{t('ai', 'bottomLine')} · {level(summary.bottomLine.confidence)}</small><h4>{summary.bottomLine.statement}</h4><Evidence items={summary.bottomLine.evidence} label={t('ai', 'showEvidence')} /></section>}
@@ -232,6 +256,7 @@ export default function AIAnalysis({ analysis }: AIAnalysisProps) {
       {activeMode === 'language' && analysis.languageClass && <LanguageReport languageClass={analysis.languageClass} legacySpeakers={asArray(analysis.speakers)} t={t} fallback={fallback} />}
       {activeMode === 'meeting' && analysis.meeting && <MeetingReport meeting={analysis.meeting} t={t} fallback={fallback} />}
 
+      <EvidenceCatalog quality={quality} t={t} />
       <p className="analysis-disclaimer"><ShieldCheck />{t('ai', 'disclaimer')}</p>
     </div>
   );

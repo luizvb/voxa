@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { ANALYSIS_CONTRACT_VERSION, DEFAULT_ANALYSIS_MODEL, buildAnalysisJsonSchema, buildAnalysisOutputContract, buildAnalysisPrompt, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, sanitizeAnalysisResult } = require('../dist/services/llm');
+const { ANALYSIS_CONTRACT_VERSION, DEFAULT_ANALYSIS_MODEL, buildAnalysisJsonSchema, buildAnalysisOutputContract, buildAnalysisPrompt, buildTranscriptStructure, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, parseTranscriptTurns, sanitizeAnalysisResult } = require('../dist/services/llm');
 const { completeJsonWithOpenRouter } = require('../dist/services/llm');
 
 test('analysis modes are validated, deduplicated and default to language', () => {
@@ -56,6 +56,32 @@ test('speaker labels are extracted from Deepgram markdown and common pasted tran
   assert.deepEqual(normalizeSelectedSpeakers(['bruno', 'Speaker 0', 'missing'], transcript), ['Speaker 0', 'Bruno']);
 });
 
+test('multiline transcripts are assembled into complete turns and question-answer units', () => {
+  const transcript = [
+    '**Interviewer** (00:10)',
+    'Tell me about the migration you led',
+    'and which trade-off was hardest?',
+    '',
+    '**Candidate** (00:25)',
+    'I split it into two stages.',
+    'The hard trade-off was speed versus rollback safety.',
+    '',
+    '**Interviewer** (00:50)',
+    'What changed after launch?',
+    '**Candidate:** Failed imports fell by thirty percent.'
+  ].join('\n');
+  const turns = parseTranscriptTurns(transcript);
+  assert.deepEqual(turns.map(({ id, speaker, text }) => ({ id, speaker, text })), [
+    { id: 'T001', speaker: 'Interviewer', text: 'Tell me about the migration you led and which trade-off was hardest?' },
+    { id: 'T002', speaker: 'Candidate', text: 'I split it into two stages. The hard trade-off was speed versus rollback safety.' },
+    { id: 'T003', speaker: 'Interviewer', text: 'What changed after launch?' },
+    { id: 'T004', speaker: 'Candidate', text: 'Failed imports fell by thirty percent.' }
+  ]);
+  const structured = buildTranscriptStructure(transcript);
+  assert.deepEqual(structured.questionMap, ['Q001: T001 -> T002', 'Q002: T003 -> T004']);
+  assert.match(structured.formatted, /T002 \[00:25\] Candidate: I split it into two stages/);
+});
+
 test('combined analysis prompt includes selected schemas and safety boundaries', () => {
   const prompt = buildAnalysisPrompt('**Speaker 0** Hello', {
     modes: ['interview', 'language', 'meeting'],
@@ -81,9 +107,9 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /\*\*Speaker 0\*\* Hello/);
 });
 
-test('v5 output contract adds executive decision support and separates factual registers from recommendations', () => {
+test('v6 output contract adds a citation ledger and transcription uncertainty register', () => {
   const contract = buildAnalysisOutputContract(['interview', 'meeting']);
-  assert.equal(ANALYSIS_CONTRACT_VERSION, '5.0');
+  assert.equal(ANALYSIS_CONTRACT_VERSION, '6.0');
   assert.deepEqual(Object.keys(contract), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
   assert.equal(contract.languageClass, null);
   assert.ok(contract.interview.context);
@@ -91,6 +117,9 @@ test('v5 output contract adds executive decision support and separates factual r
   assert.ok(contract.summary.bottomLine);
   assert.ok(contract.summary.criticalFindings);
   assert.ok(contract.summary.recommendedActions);
+  assert.ok(contract.evidenceQuality.citationSummary);
+  assert.ok(contract.evidenceQuality.evidenceCatalog);
+  assert.ok(contract.evidenceQuality.transcriptionUncertainties);
   assert.ok(contract.interview.coaching);
   assert.ok(contract.meeting.executiveBrief);
   assert.ok(contract.meeting.actionItems);
@@ -104,7 +133,7 @@ test('analysis JSON schema is strict, mode-specific and constrains scores', () =
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
   assert.deepEqual(schema.properties.interview, { type: 'null' });
-  assert.deepEqual(schema.properties.version.enum, ['5.0']);
+  assert.deepEqual(schema.properties.version.enum, ['6.0']);
   assert.deepEqual(schema.properties.analysisModes.items.enum, ['meeting']);
   assert.equal(schema.properties.analysisModes.minItems, 1);
   assert.equal(schema.properties.analysisModes.maxItems, 1);
@@ -160,7 +189,7 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   }, transcript, ['meeting']);
 
   assert.deepEqual(Object.keys(sanitized), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
-  assert.equal(sanitized.version, '5.0');
+  assert.equal(sanitized.version, '6.0');
   assert.deepEqual(sanitized.analysisModes, ['meeting']);
   assert.equal(sanitized.interview, null);
   assert.equal(sanitized.languageClass, null);
@@ -171,6 +200,78 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   assert.deepEqual(Object.keys(sanitized.meeting), Object.keys(buildAnalysisOutputContract(['meeting']).meeting));
   assert.equal(sanitized.evidenceQuality.level, 'low');
   assert.ok(sanitized.evidenceQuality.limitations.length >= 1);
+});
+
+test('sanitizer canonicalizes repeated quotes into one transparent citation catalog', () => {
+  const transcript = 'Ana: I will send the launch checklist on Friday.';
+  const quote = { speaker: 'Ana', quote: 'I will send the launch checklist on Friday' };
+  const sanitized = sanitizeAnalysisResult({
+    summary: {
+      title: 'Launch',
+      criticalFindings: [
+        { finding: 'Checklist commitment', significance: 'Execution is explicit.', businessImpact: 'Reduces ambiguity.', confidence: 'high', evidence: [quote, quote] },
+        { finding: 'Friday timing', significance: 'Timing is explicit.', businessImpact: 'Supports planning.', confidence: 'high', evidence: [quote] }
+      ]
+    },
+    evidenceQuality: { level: 'high', reasons: [], limitations: [], missingInformation: [], transcriptionUncertainties: [] },
+    meeting: {
+      actionItems: [{ task: 'Send checklist', owner: 'Ana', dueDate: 'Friday', priority: 'high', status: 'open', dependency: null, expectedOutcome: 'Checklist sent.', evidence: [quote] }]
+    }
+  }, transcript, ['meeting']);
+
+  assert.equal(sanitized.evidenceQuality.evidenceCatalog.length, 1);
+  assert.deepEqual(sanitized.evidenceQuality.citationSummary, {
+    totalReferences: 4,
+    uniqueCitations: 1,
+    repeatedReferences: 3,
+    reuseRatio: 0.75
+  });
+  assert.equal(sanitized.summary.criticalFindings[0].evidence.length, 1);
+  assert.equal(sanitized.summary.criticalFindings[0].evidence[0].citationId, 'E001');
+  assert.equal(sanitized.summary.criticalFindings[0].evidence[0].turnId, 'T001');
+  assert.equal(sanitized.meeting.actionItems[0].evidence[0].citationId, 'E001');
+});
+
+test('self-repairs and probable ASR corruption cannot become vocabulary failures', () => {
+  const transcript = [
+    'Candidate: I worked as full psych … full stack developer.',
+    'Candidate: In React we used styles company for the design system.'
+  ].join('\n');
+  const sanitized = sanitizeAnalysisResult({
+    summary: {},
+    evidenceQuality: {
+      level: 'medium',
+      reasons: [],
+      limitations: [],
+      missingInformation: [],
+      transcriptionUncertainties: [{
+        turnId: '',
+        original: 'styles company',
+        probableReading: 'Styled Components',
+        confidence: 'medium',
+        rationale: 'React styling context supports a technical proper name.',
+        affectsAssessment: true
+      }]
+    },
+    languageClass: {
+      languagePatterns: [
+        { category: 'vocabulary', pattern: 'Incorrect job title', frequency: 'single', impact: 'Low precision.', evidence: [{ speaker: 'Candidate', quote: 'full psych … full stack developer' }] },
+        { category: 'vocabulary', pattern: 'Incorrect library name', frequency: 'single', impact: 'Low precision.', evidence: [{ speaker: 'Candidate', quote: 'used styles company for the design system' }] }
+      ],
+      corrections: [
+        { speaker: 'Candidate', category: 'vocabulary', sourceType: 'learner_error', original: 'full psych', corrected: 'full stack', explanation: 'Job title.', rule: '', recurrence: 'single', priority: 'low', evidence: [{ speaker: 'Candidate', quote: 'full psych … full stack developer' }] },
+        { speaker: 'Candidate', category: 'vocabulary', sourceType: 'transcription_uncertain', original: 'styles company', corrected: 'Styled Components', explanation: 'Technical name.', rule: '', recurrence: 'single', priority: 'low', evidence: [{ speaker: 'Candidate', quote: 'used styles company for the design system' }] }
+      ]
+    }
+  }, transcript, ['language']);
+
+  assert.equal(sanitized.languageClass.corrections.length, 0);
+  assert.equal(sanitized.languageClass.languagePatterns.length, 0);
+  assert.equal(sanitized.evidenceQuality.transcriptionUncertainties.length, 1);
+  assert.equal(sanitized.evidenceQuality.transcriptionUncertainties[0].probableReading, 'Styled Components');
+  assert.equal(sanitized.evidenceQuality.transcriptionUncertainties[0].affectsAssessment, false);
+  assert.equal(sanitized.evidenceQuality.level, 'medium');
+  assert.match(sanitized.evidenceQuality.reasons.at(-1), /excluded from negative assessment/);
 });
 
 test('analysis sanitizer preserves the numeric evidence dimension inside question reviews', () => {

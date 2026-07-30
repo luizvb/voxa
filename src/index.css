@@ -612,7 +612,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .analysis-hero h3 { max-width: 760px; margin: 12px 0 0; color: #f2f5f1 !important; font-size: clamp(25px, 3.6vw, 38px); }
 .analysis-hero p { max-width: 76ch; font-size: 13px; }
 .analysis-purpose { display: block; margin-top: 14px; color: #969c94; font-size: 9px; line-height: 1.5; }
-.analysis-report-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; align-self: stretch; margin: 0; border-left: 1px solid #3c403a; padding-left: 22px; }
+.analysis-report-stats { display: grid; grid-template-columns: repeat(2, minmax(82px, 1fr)); gap: 1px; align-self: stretch; margin: 0; border-left: 1px solid #3c403a; padding-left: 22px; }
 .analysis-report-stats > div { display: flex; flex-direction: column; justify-content: end; padding: 0 9px; }
 .analysis-report-stats dt { color: #8d938a; font-size: 7px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .analysis-report-stats dd { margin: 7px 0 0; color: #eff3ed; font-size: 17px; font-weight: 700; text-transform: capitalize; }
@@ -671,6 +671,25 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .evidence-disclosure > summary b { display: grid; min-width: 16px; height: 16px; place-items: center; border-radius: 4px; background: #edf0eb; font-size: 7px; }
 .evidence-stack { margin-top: 7px; }
 .evidence-stack blockquote { grid-template-columns: auto 1fr; border-left-width: 1px; padding: 6px 8px; background: #f7f8f5; }
+.evidence-references { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; color: #66736a; font-size: 8px; }
+.evidence-references > svg { width: 11px; }
+.evidence-references > button { border: 1px solid #d8ded7; border-radius: 5px; padding: 3px 5px; background: #f4f6f2; color: #3f5545; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 7px; font-weight: 750; cursor: pointer; }
+.evidence-references > button:hover { border-color: #8fa091; background: #edf2ed; }
+.evidence-catalog { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 16px; padding: 22px; background: #fff; }
+.evidence-catalog-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.evidence-catalog-list blockquote { scroll-margin-top: 20px; margin: 0; border-bottom: 1px solid var(--line); padding: 11px 0; }
+.evidence-catalog-list blockquote:target { border-radius: 8px; padding-inline: 9px; background: #f0f5ef; }
+.evidence-catalog-list header { display: flex; align-items: center; gap: 7px; color: var(--text-tertiary); font-size: 8px; }
+.evidence-catalog-list header b { color: #38513e; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.evidence-catalog-list header strong { margin-left: auto; color: var(--text-secondary); }
+.evidence-catalog-list p { margin: 6px 0 0; color: var(--text-secondary); font-family: Georgia, "Times New Roman", serif; font-size: 10px; line-height: 1.55; }
+.transcription-uncertainties { border-top: 1px solid var(--line); padding-top: 14px; }
+.transcription-uncertainties h5 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 9px; text-transform: uppercase; }
+.transcription-uncertainties h5 svg { width: 14px; color: #936f2d; }
+.transcription-uncertainties article { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 5px 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.transcription-uncertainties article header { grid-column: 1 / -1; display: flex; gap: 8px; color: var(--text-tertiary); font-size: 8px; text-transform: uppercase; }
+.transcription-uncertainties article p, .transcription-uncertainties article del { margin: 0; font-size: 10px; }
+.transcription-uncertainties article small { grid-column: 1 / -1; color: var(--text-tertiary); font-size: 8px; }
 
 .contradiction-list article { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .contradiction-list article:last-child { border-bottom: 0; }
@@ -803,6 +822,8 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
   .pattern-table article { grid-template-columns: 70px minmax(0, 1fr); }
   .pattern-table article header b { display: none; }
   .pattern-table article p, .pattern-table .evidence-disclosure { grid-column: 2; }
+  .evidence-catalog-list, .transcription-uncertainties article { grid-template-columns: 1fr; }
+  .transcription-uncertainties article header, .transcription-uncertainties article small { grid-column: 1; }
 }
 
 /* Overlays, auth, onboarding */

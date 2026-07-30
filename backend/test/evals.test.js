@@ -14,7 +14,7 @@ test('eval config is bounded and rejects unknown modes and categories', () => {
 test('deterministic checks reject invented action ownership and unselected mode output', () => {
   const scenario = { title: 'Planning', category: 'incomplete', mode: 'meeting', context: '', transcript: 'Ana: We should prepare the launch checklist.', expectedFacts: [], absentFacts: ['owner', 'date'], expectedSignals: [] };
   const analysis = {
-    version: '5.0', analysisModes: ['meeting'], summary: {}, evidenceQuality: {}, interview: { executiveAssessment: { overallScore: 8 } }, languageClass: null,
+    version: '6.0', analysisModes: ['meeting'], summary: {}, evidenceQuality: {}, interview: { executiveAssessment: { overallScore: 8 } }, languageClass: null,
     meeting: { actionItems: [{ task: 'Prepare checklist', owner: 'Bruno', dueDate: 'Friday', evidence: [{ speaker: 'Ana', quote: 'We should prepare the launch checklist' }] }] }
   };
   const checks = runDeterministicChecks(analysis, scenario);
@@ -22,11 +22,14 @@ test('deterministic checks reject invented action ownership and unselected mode 
   assert.equal(checks.find((item) => item.id === 'ownership-grounding').passed, false);
 });
 
-test('deterministic checks accept exact v5 grounded meeting output', () => {
+test('deterministic checks accept exact v6 grounded meeting output with a citation ledger', () => {
   const scenario = { title: 'Planning', category: 'normal', mode: 'meeting', context: '', transcript: 'Ana: I will prepare the launch checklist by Friday.', expectedFacts: [], absentFacts: [], expectedSignals: [] };
-  const evidence = [{ speaker: 'Ana', quote: 'I will prepare the launch checklist by Friday' }];
+  const evidence = [{ speaker: 'Ana', quote: 'I will prepare the launch checklist by Friday', citationId: 'E001', turnId: 'T001' }];
   const analysis = {
-    version: '5.0', analysisModes: ['meeting'], summary: {}, evidenceQuality: {}, interview: null, languageClass: null,
+    version: '6.0', analysisModes: ['meeting'], summary: {}, evidenceQuality: {
+      citationSummary: { totalReferences: 1, uniqueCitations: 1, repeatedReferences: 0, reuseRatio: 0 },
+      evidenceCatalog: [{ citationId: 'E001', turnId: 'T001', speaker: 'Ana', quote: 'I will prepare the launch checklist by Friday' }]
+    }, interview: null, languageClass: null,
     meeting: { actionItems: [{ task: 'Prepare the launch checklist', owner: 'Ana', dueDate: 'Friday', evidence }] }
   };
   const checks = runDeterministicChecks(analysis, scenario);
