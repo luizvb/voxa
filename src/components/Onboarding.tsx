@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, BrainCircuit, FileText, Mic } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { platform } from '../platform';
 import { Logo } from './Logo';
 
 interface OnboardingProps {
@@ -10,7 +11,7 @@ interface OnboardingProps {
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const { t, language, setLanguage } = useLanguage();
   const steps = [
-    { icon: Mic, title: t('onboarding', 'record'), description: t('onboarding', 'recordDesc') },
+    { icon: Mic, title: t('onboarding', 'record'), description: t('onboarding', platform.capabilities.kind === 'web' ? 'recordDescWeb' : 'recordDesc') },
     { icon: FileText, title: t('onboarding', 'transcribe'), description: t('onboarding', 'transcribeDesc') },
     { icon: BrainCircuit, title: t('onboarding', 'analyze'), description: t('onboarding', 'analyzeDesc') },
   ];
@@ -71,7 +72,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <ArrowRight />
           </button>
         </div>
-        <p className="permission-note">{t('onboarding', 'permissionNote')}</p>
+        <p className="permission-note">{t('onboarding', platform.capabilities.kind === 'web' ? 'permissionNoteWeb' : 'permissionNote')}</p>
       </motion.section>
     </motion.div>
   );

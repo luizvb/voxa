@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -47,6 +47,14 @@ const level = (value: any) => String(value || 'unknown').replaceAll('_', ' ');
 const score = (value: any, _fallback: string) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}/10` : 'N/A';
 const statement = (value: any, fallback: string) => sentence(typeof value === 'object' ? value?.statement : value, fallback);
 
+function focusReportTarget(id: string) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+}
+
 function Evidence({ items, label }: { items: any[]; label: string }) {
   const evidence = asArray(items).filter((item) => item?.quote || typeof item === 'string');
   if (!evidence.length) return null;
@@ -54,14 +62,14 @@ function Evidence({ items, label }: { items: any[]; label: string }) {
   if (cited.length === evidence.length) {
     return (
       <div className="evidence-references" aria-label={label}>
-        <Quote /><span>{label}</span>
-        {cited.map((item) => <button type="button" key={item.citationId} onClick={() => document.getElementById(`citation-${item.citationId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>{item.citationId}{item.turnId ? ` · ${item.turnId}` : ''}</button>)}
+        <Quote aria-hidden="true" /><span>{label}</span>
+        {cited.map((item) => <button type="button" key={item.citationId} aria-label={`${label}: ${item.citationId}${item.turnId ? `, ${item.turnId}` : ''}`} onClick={() => focusReportTarget(`citation-${item.citationId}`)}>{item.citationId}{item.turnId ? ` · ${item.turnId}` : ''}</button>)}
       </div>
     );
   }
   return (
     <details className="evidence-disclosure">
-      <summary><Quote /><span>{label}</span><b>{evidence.length}</b><ChevronDown /></summary>
+      <summary><Quote aria-hidden="true" /><span>{label}</span><b aria-label={`${evidence.length}`}>{evidence.length}</b><ChevronDown aria-hidden="true" /></summary>
       <div className="evidence-stack">
         {evidence.map((item, index) => {
           const quote = typeof item === 'string' ? item : item.quote;
@@ -78,10 +86,10 @@ function EvidenceCatalog({ quality, t }: { quality: any; t: any }) {
   const uncertainties = asArray(quality?.transcriptionUncertainties);
   if (!catalog.length && !uncertainties.length) return null;
   return (
-    <section className="evidence-catalog">
-      <RegisterHeading icon={Quote} title={t('ai', 'evidenceCatalog')} count={catalog.length} />
-      {!!catalog.length && <div className="evidence-catalog-list">{catalog.map((item) => <blockquote id={`citation-${item.citationId}`} key={item.citationId}><header><b>{item.citationId}</b><span>{item.turnId}</span><strong>{item.speaker}</strong></header><p>{item.quote}</p></blockquote>)}</div>}
-      {!!uncertainties.length && <div className="transcription-uncertainties"><h5><AlertTriangle />{t('ai', 'transcriptionUncertainties')}</h5>{uncertainties.map((item, index) => <article key={`${item.turnId}-${item.original}-${index}`}><header><b>{item.turnId}</b><span>{level(item.confidence)}</span></header><del>{item.original}</del><p><strong>{t('ai', 'probableReading')}:</strong> {item.probableReading}</p><small>{item.rationale}</small></article>)}</div>}
+    <section className="evidence-catalog" aria-labelledby="evidence-catalog-title">
+      <RegisterHeading id="evidence-catalog-title" icon={Quote} title={t('ai', 'evidenceCatalog')} count={catalog.length} />
+      {!!catalog.length && <div className="evidence-catalog-list">{catalog.map((item) => <blockquote tabIndex={-1} id={`citation-${item.citationId}`} key={item.citationId}><header><b>{item.citationId}</b><span>{item.turnId}</span><strong>{item.speaker}</strong></header><p>{item.quote}</p></blockquote>)}</div>}
+      {!!uncertainties.length && <div className="transcription-uncertainties"><h5><AlertTriangle aria-hidden="true" />{t('ai', 'transcriptionUncertainties')}</h5>{uncertainties.map((item, index) => <article key={`${item.turnId}-${item.original}-${index}`}><header><b>{item.turnId}</b><span>{level(item.confidence)}</span></header><del>{item.original}</del><p><strong>{t('ai', 'probableReading')}:</strong> {item.probableReading}</p><small>{item.rationale}</small></article>)}</div>}
     </section>
   );
 }
@@ -92,11 +100,11 @@ function InsightList({ items, empty }: { items: any[]; empty: string }) {
 }
 
 function SectionHeading({ icon: Icon, title, description }: { icon: any; title: string; description?: string }) {
-  return <header className="mode-section-heading"><div><Icon /><span>{title}</span></div>{description && <p>{description}</p>}</header>;
+  return <header className="mode-section-heading"><div><Icon aria-hidden="true" /><h3>{title}</h3></div>{description && <p>{description}</p>}</header>;
 }
 
-function RegisterHeading({ icon: Icon, title, count }: { icon: any; title: string; count?: number }) {
-  return <header className="register-heading"><div><Icon /><h4>{title}</h4></div>{typeof count === 'number' && <span>{count}</span>}</header>;
+function RegisterHeading({ icon: Icon, title, count, id }: { icon: any; title: string; count?: number; id?: string }) {
+  return <header className="register-heading"><div><Icon aria-hidden="true" /><h4 id={id}>{title}</h4></div>{typeof count === 'number' && <span aria-label={`${count}`}>{count}</span>}</header>;
 }
 
 function ContextStrip({ items }: { items: Array<{ label: string; value: any }> }) {
@@ -201,6 +209,7 @@ function LanguageReport({
   const [speakingCorrectionKey, setSpeakingCorrectionKey] = useState<string | null>(null);
   const [speechSupported] = useState(() => typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window);
   const speechRequestRef = useRef(0);
+  const learnerTabsId = useId().replaceAll(':', '');
   useEffect(() => { if (!profiles.some((item) => item.speaker === activeLearner)) setActiveLearner(profiles[0]?.speaker || ''); }, [activeLearner, profiles]);
   useEffect(() => () => {
     speechRequestRef.current += 1;
@@ -234,6 +243,19 @@ function LanguageReport({
     setSpeakingCorrectionKey(key);
     window.speechSynthesis.speak(utterance);
   };
+  const selectLearnerFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? profiles.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + profiles.length) % profiles.length;
+    const nextLearner = profiles[nextIndex]?.speaker;
+    if (!nextLearner) return;
+    setActiveLearner(nextLearner);
+    document.getElementById(`${learnerTabsId}-tab-${nextIndex}`)?.focus();
+  };
   const learner = profiles.find((item) => item.speaker === activeLearner) || profiles[0];
   const progress = languageClass.lessonProgress || {};
   const teacherPlan = languageClass.teacherPlan || languageClass.teacherBrief || {};
@@ -251,7 +273,7 @@ function LanguageReport({
       ]} />
       <Evidence items={lesson.evidence} label={t('ai', 'showEvidence')} />
 
-      {!!profiles.length && <><div className="speaker-tabs" role="tablist" aria-label={t('ai', 'learners')}>{profiles.map((item) => <button type="button" role="tab" aria-selected={activeLearner === item.speaker} key={item.speaker} className={activeLearner === item.speaker ? 'is-active' : ''} onClick={() => setActiveLearner(item.speaker)}>{item.speaker}</button>)}</div>{learner && <section className="learner-profile"><header><div><small>{t('ai', 'learnerAssessment')}</small><h4>{learner.speaker}</h4><p>{learner.overallAssessment || learner.teacherFeedback}</p>{learner.highestLeverageChange && <p className="next-question"><b>{t('ai', 'highestLeverageChange')}:</b> {learner.highestLeverageChange}</p>}</div><div className="learner-level"><strong>{learner.cefr?.level || 'unknown'}</strong><span>CEFR</span><small>{level(learner.cefr?.confidence || learner.evidenceSufficiency)}</small></div></header>{learner.cefr?.rationale && <p className="cefr-rationale">{learner.cefr.rationale}</p>}<div className="skill-table">{Object.entries(learner.skills || {}).map(([key, value]: [string, any]) => <article key={key}><header><strong>{t('ai', key)}</strong><b>{score(value?.score, fallback)}</b></header><p>{value?.observation || fallback}</p><Evidence items={value?.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div className="analysis-register-grid"><SignalRegister title={t('ai', 'whatToReinforce')} icon={CheckCircle2} items={asArray(learner.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" /><SignalRegister title={t('ai', 'priorityGaps')} icon={TrendingUp} items={asArray(learner.priorities).map((item) => ({ ...item, demonstratedBy: item.pattern, hiringRelevance: item.communicationImpact || item.impact, verificationQuestion: item.nextStep }))} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" /></div>{learner.participation && <div className="participation-note"><b>{t('ai', 'participation')}:</b> {level(learner.participation.share)}. {learner.participation.interactionPattern}<Evidence items={learner.participation.evidence} label={t('ai', 'showEvidence')} /></div>}</section>}</>}
+      {!!profiles.length && <><div className="speaker-tabs" role="tablist" aria-label={t('ai', 'learners')}>{profiles.map((item, index) => <button type="button" role="tab" id={`${learnerTabsId}-tab-${index}`} aria-controls={`${learnerTabsId}-panel`} aria-selected={activeLearner === item.speaker} tabIndex={activeLearner === item.speaker ? 0 : -1} key={item.speaker} className={activeLearner === item.speaker ? 'is-active' : ''} onKeyDown={(event) => selectLearnerFromKeyboard(event, index)} onClick={() => setActiveLearner(item.speaker)}>{item.speaker}</button>)}</div>{learner && <section className="learner-profile" id={`${learnerTabsId}-panel`} role="tabpanel" aria-labelledby={`${learnerTabsId}-tab-${profiles.findIndex((item) => item.speaker === learner.speaker)}`}><header><div><small>{t('ai', 'learnerAssessment')}</small><h4>{learner.speaker}</h4><p>{learner.overallAssessment || learner.teacherFeedback}</p>{learner.highestLeverageChange && <p className="next-question"><b>{t('ai', 'highestLeverageChange')}:</b> {learner.highestLeverageChange}</p>}</div><div className="learner-level"><strong>{learner.cefr?.level || 'unknown'}</strong><span>CEFR</span><small>{level(learner.cefr?.confidence || learner.evidenceSufficiency)}</small></div></header>{learner.cefr?.rationale && <p className="cefr-rationale">{learner.cefr.rationale}</p>}<div className="skill-table">{Object.entries(learner.skills || {}).map(([key, value]: [string, any]) => <article key={key}><header><strong>{t('ai', key)}</strong><b>{score(value?.score, fallback)}</b></header><p>{value?.observation || fallback}</p><Evidence items={value?.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div className="analysis-register-grid"><SignalRegister title={t('ai', 'whatToReinforce')} icon={CheckCircle2} items={asArray(learner.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" /><SignalRegister title={t('ai', 'priorityGaps')} icon={TrendingUp} items={asArray(learner.priorities).map((item) => ({ ...item, demonstratedBy: item.pattern, hiringRelevance: item.communicationImpact || item.impact, verificationQuestion: item.nextStep }))} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" /></div>{learner.participation && <div className="participation-note"><b>{t('ai', 'participation')}:</b> {level(learner.participation.share)}. {learner.participation.interactionPattern}<Evidence items={learner.participation.evidence} label={t('ai', 'showEvidence')} /></div>}</section>}</>}
 
       <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'languagePatterns')} count={patterns.length} /><div className="pattern-table">{patterns.map((item, index) => <article key={`${item.pattern}-${index}`}><header><span>{level(item.category || item.frequency)}</span><strong>{item.pattern}</strong><b>{level(item.frequency)}</b></header><p>{item.impact}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
 
@@ -362,6 +384,7 @@ export default function AIAnalysis({
   onPauseRecordingAudio,
 }: AIAnalysisProps) {
   const { t } = useLanguage();
+  const reportId = useId().replaceAll(':', '');
   const fallback = t('ai', 'notAvailable');
   const modes = useMemo(() => {
     const declared = asArray(analysis?.analysisModes).filter((mode): mode is AnalysisMode => ['interview', 'language', 'meeting'].includes(mode));
@@ -370,6 +393,19 @@ export default function AIAnalysis({
   }, [analysis]);
   const [activeMode, setActiveMode] = useState<AnalysisMode>(modes[0] || 'language');
   useEffect(() => { if (!modes.includes(activeMode)) setActiveMode(modes[0] || 'language'); }, [activeMode, modes]);
+  const selectModeFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? modes.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + modes.length) % modes.length;
+    const nextMode = modes[nextIndex];
+    if (!nextMode) return;
+    setActiveMode(nextMode);
+    document.getElementById(`${reportId}-tab-${nextMode}`)?.focus();
+  };
 
   if (!analysis) return <div className="analysis-empty">{t('ai', 'noData')}</div>;
   const quality = analysis.evidenceQuality || {};
@@ -381,41 +417,55 @@ export default function AIAnalysis({
   const unansweredQuestions = asArray(summary.unansweredQuestions);
   const citationSummary = quality.citationSummary || {};
   const hasCitationSummary = Number.isFinite(Number(citationSummary.uniqueCitations));
+  const hasEvidenceCatalog = asArray(quality.evidenceCatalog).length > 0 || asArray(quality.transcriptionUncertainties).length > 0;
   return (
-    <div className="analysis-view">
-      <section className="analysis-hero">
-        <div><span className="analysis-kicker"><ShieldCheck />{t('ai', 'verifiedReport')}</span><h3>{summary.title || t('ai', 'overview')}</h3><p>{statement(brief, fallback)}</p>{summary.purpose && <small className="analysis-purpose">{t('ai', 'purpose')}: {statement(summary.purpose, fallback)}</small>}</div>
+    <article className="analysis-view" aria-labelledby={`${reportId}-title`}>
+      <section className="analysis-hero" id={`${reportId}-overview`} tabIndex={-1}>
+        <div><span className="analysis-kicker"><ShieldCheck aria-hidden="true" />{t('ai', 'verifiedReport')}</span><h2 id={`${reportId}-title`}>{summary.title || t('ai', 'overview')}</h2><p>{statement(brief, fallback)}</p>{summary.purpose && <small className="analysis-purpose"><b>{t('ai', 'purpose')}:</b> {statement(summary.purpose, fallback)}</small>}</div>
         <dl className="analysis-report-stats"><div><dt>{t('ai', 'evidenceQuality')}</dt><dd>{level(quality.level)}</dd></div>{hasCitationSummary ? <><div><dt>{t('ai', 'uniqueCitations')}</dt><dd>{citationSummary.uniqueCitations}</dd></div><div><dt>{t('ai', 'evidenceReferences')}</dt><dd>{citationSummary.totalReferences}</dd></div><div><dt>{t('ai', 'repeatedReferences')}</dt><dd>{citationSummary.repeatedReferences}</dd></div></> : <><div><dt>{t('ai', 'analysisLenses')}</dt><dd>{modes.length}</dd></div><div><dt>{t('ai', 'keyPoints')}</dt><dd>{keyPoints.length}</dd></div></>}<small>v{analysis.version || 'legacy'}</small></dl>
       </section>
 
-      {summary.bottomLine?.statement && <section className="manager-brief"><small>{t('ai', 'bottomLine')} · {level(summary.bottomLine.confidence)}</small><h4>{summary.bottomLine.statement}</h4><Evidence items={summary.bottomLine.evidence} label={t('ai', 'showEvidence')} /></section>}
-      {!!criticalFindings.length && <section className="analysis-register is-critical"><RegisterHeading icon={AlertTriangle} title={t('ai', 'criticalFindings')} count={criticalFindings.length} /><div className="register-rows">{criticalFindings.map((item, index) => <article key={`${item.finding}-${index}`}><header><strong>{item.finding}</strong><span className="semantic-label">{level(item.confidence)}</span></header><p>{item.significance}</p>{item.businessImpact && <p className="next-question"><b>{t('ai', 'businessImpact')}:</b> {item.businessImpact}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
-      {(!!recommendedActions.length || !!unansweredQuestions.length) && <div className="analysis-register-grid"><section className="analysis-register coaching-register"><RegisterHeading icon={ListChecks} title={t('ai', 'recommendedActions')} count={recommendedActions.length} /><div className="register-rows">{recommendedActions.map((item, index) => <article key={`${item.action}-${index}`}><header><strong>{item.action}</strong><span className="semantic-label">{level(item.priority)}</span></header><p>{item.rationale}</p>{item.expectedOutcome && <small>{t('ai', 'expectedOutcome')}: {item.expectedOutcome}</small>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section><section className="analysis-register"><RegisterHeading icon={CircleHelp} title={t('ai', 'executiveQuestions')} count={unansweredQuestions.length} /><div className="register-rows">{unansweredQuestions.map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.whyItMatters}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section></div>}
-      {!!keyPoints.length && <section className="key-point-strip">{keyPoints.slice(0, 5).map((item, index) => <article key={`${item.statement}-${index}`}><span>{level(item.category)}</span><p>{item.statement}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</section>}
-      {(!!asArray(quality.limitations).length || !!asArray(quality.missingInformation).length) && <section className="analysis-limitations"><AlertTriangle /><div><strong>{t('ai', 'limitations')}</strong>{quality.confidenceRationale && <p>{quality.confidenceRationale}</p>}<InsightList items={[...asArray(quality.limitations), ...asArray(quality.missingInformation)]} empty={fallback} /></div></section>}
+      <nav className="analysis-section-nav" aria-label={t('ai', 'analysisLenses')}>
+        <button type="button" onClick={() => focusReportTarget(`${reportId}-overview`)}><ShieldCheck aria-hidden="true" /><span>{t('ai', 'overview')}</span></button>
+        <button type="button" onClick={() => focusReportTarget(`${reportId}-executive`)}><Lightbulb aria-hidden="true" /><span>{t('ai', 'bottomLine')}</span></button>
+        <button type="button" onClick={() => focusReportTarget(`${reportId}-lenses`)}><Layers3 aria-hidden="true" /><span>{t('ai', 'analysisLenses')}</span></button>
+        {hasEvidenceCatalog && <button type="button" onClick={() => focusReportTarget(`${reportId}-evidence`)}><Quote aria-hidden="true" /><span>{t('ai', 'evidenceCatalog')}</span></button>}
+      </nav>
 
-      <nav className="analysis-lens-tabs" aria-label={t('ai', 'analysisLenses')}>{modes.map((mode) => <button type="button" key={mode} className={activeMode === mode ? 'is-active' : ''} aria-pressed={activeMode === mode} onClick={() => setActiveMode(mode)}>{mode === 'interview' ? <BriefcaseBusiness /> : mode === 'language' ? <BookOpen /> : <Users />}<span>{t('analysisModes', mode)}</span><small>{t('ai', `${mode}Lens`)}</small></button>)}</nav>
+      <div className="analysis-executive-flow" id={`${reportId}-executive`} tabIndex={-1}>
+        {summary.bottomLine?.statement && <section className="manager-brief"><small>{t('ai', 'bottomLine')} · {level(summary.bottomLine.confidence)}</small><h3>{summary.bottomLine.statement}</h3><Evidence items={summary.bottomLine.evidence} label={t('ai', 'showEvidence')} /></section>}
+        {!!criticalFindings.length && <section className="analysis-register is-critical"><RegisterHeading icon={AlertTriangle} title={t('ai', 'criticalFindings')} count={criticalFindings.length} /><div className="register-rows">{criticalFindings.map((item, index) => <article key={`${item.finding}-${index}`}><header><strong>{item.finding}</strong><span className="semantic-label">{level(item.confidence)}</span></header><p>{item.significance}</p>{item.businessImpact && <p className="next-question"><b>{t('ai', 'businessImpact')}:</b> {item.businessImpact}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
+        {(!!recommendedActions.length || !!unansweredQuestions.length) && <div className="analysis-register-grid"><section className="analysis-register coaching-register"><RegisterHeading icon={ListChecks} title={t('ai', 'recommendedActions')} count={recommendedActions.length} /><div className="register-rows">{recommendedActions.map((item, index) => <article key={`${item.action}-${index}`}><header><strong>{item.action}</strong><span className="semantic-label">{level(item.priority)}</span></header><p>{item.rationale}</p>{item.expectedOutcome && <small>{t('ai', 'expectedOutcome')}: {item.expectedOutcome}</small>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section><section className="analysis-register"><RegisterHeading icon={CircleHelp} title={t('ai', 'executiveQuestions')} count={unansweredQuestions.length} /><div className="register-rows">{unansweredQuestions.map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.whyItMatters}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section></div>}
+        {!!keyPoints.length && <section className="key-point-strip">{keyPoints.slice(0, 5).map((item, index) => <article key={`${item.statement}-${index}`}><span>{level(item.category)}</span><p>{item.statement}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</section>}
+        {(!!asArray(quality.limitations).length || !!asArray(quality.missingInformation).length) && <section className="analysis-limitations"><AlertTriangle aria-hidden="true" /><div><strong>{t('ai', 'limitations')}</strong>{quality.confidenceRationale && <p>{quality.confidenceRationale}</p>}<InsightList items={[...asArray(quality.limitations), ...asArray(quality.missingInformation)]} empty={fallback} /></div></section>}
+      </div>
 
-      {activeMode === 'interview' && analysis.interview && <InterviewReport interview={analysis.interview} t={t} fallback={fallback} />}
-      {activeMode === 'language' && analysis.languageClass && (
-        <LanguageReport
-          languageClass={analysis.languageClass}
-          legacySpeakers={asArray(analysis.speakers)}
-          t={t}
-          fallback={fallback}
-          grammarAudioEnabled={grammarAudioEnabled}
-          transcriptSegments={transcriptSegments}
-          audioAvailable={audioAvailable}
-          activeAudioSegmentKey={activeAudioSegmentKey}
-          isAudioPlaying={isAudioPlaying}
-          onPlayAudioSegment={onPlayAudioSegment}
-          onPauseRecordingAudio={onPauseRecordingAudio}
-        />
-      )}
-      {activeMode === 'meeting' && analysis.meeting && <MeetingReport meeting={analysis.meeting} t={t} fallback={fallback} />}
+      <section className="analysis-lens-workspace" id={`${reportId}-lenses`} tabIndex={-1} aria-labelledby={`${reportId}-lenses-title`}>
+        <header className="analysis-lens-header"><span>{t('ai', 'analysisLenses')}</span><h2 id={`${reportId}-lenses-title`}>{t('analysisModes', activeMode)}</h2></header>
+        <div className="analysis-lens-tabs" role="tablist" aria-label={t('ai', 'analysisLenses')}>{modes.map((mode, index) => <button type="button" role="tab" id={`${reportId}-tab-${mode}`} aria-controls={`${reportId}-panel`} aria-selected={activeMode === mode} tabIndex={activeMode === mode ? 0 : -1} key={mode} className={activeMode === mode ? 'is-active' : ''} onKeyDown={(event) => selectModeFromKeyboard(event, index)} onClick={() => setActiveMode(mode)}>{mode === 'interview' ? <BriefcaseBusiness aria-hidden="true" /> : mode === 'language' ? <BookOpen aria-hidden="true" /> : <Users aria-hidden="true" />}<span>{t('analysisModes', mode)}</span><small>{t('ai', `${mode}Lens`)}</small></button>)}</div>
+        <div className="analysis-lens-panel" id={`${reportId}-panel`} role="tabpanel" aria-labelledby={`${reportId}-tab-${activeMode}`} tabIndex={0}>
+          {activeMode === 'interview' && analysis.interview && <InterviewReport interview={analysis.interview} t={t} fallback={fallback} />}
+          {activeMode === 'language' && analysis.languageClass && (
+            <LanguageReport
+              languageClass={analysis.languageClass}
+              legacySpeakers={asArray(analysis.speakers)}
+              t={t}
+              fallback={fallback}
+              grammarAudioEnabled={grammarAudioEnabled}
+              transcriptSegments={transcriptSegments}
+              audioAvailable={audioAvailable}
+              activeAudioSegmentKey={activeAudioSegmentKey}
+              isAudioPlaying={isAudioPlaying}
+              onPlayAudioSegment={onPlayAudioSegment}
+              onPauseRecordingAudio={onPauseRecordingAudio}
+            />
+          )}
+          {activeMode === 'meeting' && analysis.meeting && <MeetingReport meeting={analysis.meeting} t={t} fallback={fallback} />}
+        </div>
+      </section>
 
-      <EvidenceCatalog quality={quality} t={t} />
-      <p className="analysis-disclaimer"><ShieldCheck />{t('ai', 'disclaimer')}</p>
-    </div>
+      {hasEvidenceCatalog && <div id={`${reportId}-evidence`} tabIndex={-1}><EvidenceCatalog quality={quality} t={t} /></div>}
+      <p className="analysis-disclaimer"><ShieldCheck aria-hidden="true" />{t('ai', 'disclaimer')}</p>
+    </article>
   );
 }

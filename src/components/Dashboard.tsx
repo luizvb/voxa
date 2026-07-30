@@ -31,6 +31,7 @@ interface DashboardProps {
   onOpenLibrary: () => void;
   onSelectRecording: (id: string) => void;
   onRecordingComplete: (id: string) => void;
+  onImportTranscript: () => void;
 }
 
 type ShortcutSettings = { record: string; options: string[] };
@@ -54,9 +55,10 @@ export default function Dashboard({
   onOpenLibrary,
   onSelectRecording,
   onRecordingComplete,
+  onImportTranscript,
 }: DashboardProps) {
   const { t, language } = useLanguage();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const {
     isRecording,
     isPaused,
@@ -331,6 +333,10 @@ export default function Dashboard({
               <span key={index} style={{ height: `${18 + ((index * 29) % 72)}%` }} />
             ))}
           </div>
+          <div className="signal-storage">
+            <span>{t('recorder', 'saveMode')}</span>
+            <strong>{t('recorder', platform.capabilities.kind === 'web' ? 'cloudAfterStop' : 'localFirst')}</strong>
+          </div>
         </aside>
       </section>
 
@@ -358,7 +364,7 @@ export default function Dashboard({
         ) : recentRecordings.length === 0 ? (
           <div className="empty-state compact-state">
             <span className="empty-icon"><AudioLines /></span>
-            <div><strong>{t('workspace', 'emptyTitle')}</strong><p>{t('workspace', 'emptyDescription')}</p></div>
+            <div><strong>{t('workspace', 'emptyTitle')}</strong><p>{t('workspace', 'emptyDescription')}</p>{isAuthenticated && <button type="button" className="text-button" onClick={onImportTranscript}>{t('history', 'importTranscript')}</button>}</div>
           </div>
         ) : (
           <div className="recording-list">

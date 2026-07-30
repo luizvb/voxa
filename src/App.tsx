@@ -5,7 +5,8 @@ import ComponentsShowcase from './components/ComponentsShowcase';
 import Dashboard from './components/Dashboard';
 import ExtensionAuth from './components/ExtensionAuth';
 import HistoryView from './components/HistoryView';
-import Login from './components/Login';
+import LandingPage from './components/LandingPage';
+import Login, { type LoginContext } from './components/Login';
 import MiniWidget from './components/MiniWidget';
 import Onboarding from './components/Onboarding';
 import Sidebar from './components/Sidebar';
@@ -25,6 +26,7 @@ export default function App() {
   const { isAuthenticated, isLoading } = useAuth();
   const { t } = useLanguage();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginContext, setLoginContext] = useState<LoginContext>('generic');
   const [activeView, setActiveView] = useState<AppView>('workspace');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isCompact, setIsCompact] = useState(false);
@@ -121,7 +123,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleShowLogin = () => setShowLoginModal(true);
+    const handleShowLogin = (event: Event) => {
+      const context = event instanceof CustomEvent ? event.detail?.context : undefined;
+      setLoginContext(context === 'post_recording' || context === 'billing' || context === 'import_transcript' ? context : 'generic');
+      setShowLoginModal(true);
+    };
     window.addEventListener('auth:show-login', handleShowLogin);
     return () => window.removeEventListener('auth:show-login', handleShowLogin);
   }, []);
@@ -130,12 +136,19 @@ export default function App() {
     if (!isAuthenticated) return;
 
     setShowLoginModal(false);
+    if (loginContext === 'billing') setActiveView('billing');
+    if (loginContext === 'import_transcript') {
+      setSelectedRecordingId(null);
+      setActiveView('library');
+      setIsImportDialogOpen(true);
+    }
     const pending = localStorage.getItem('pendingRecordingId');
     if (pending) {
       localStorage.removeItem('pendingRecordingId');
       loadRecordings().then(() => handleSelectRecording(pending, true));
     }
-  }, [handleSelectRecording, isAuthenticated, loadRecordings]);
+    setLoginContext('generic');
+  }, [handleSelectRecording, isAuthenticated, loadRecordings, loginContext]);
 
   useEffect(() => {
     return platform.subscribeToRecordingsChanged(loadRecordings);
@@ -147,6 +160,7 @@ export default function App() {
 
     if (!isAuthenticated) {
       localStorage.setItem('pendingRecordingId', id);
+      setLoginContext('post_recording');
       setShowLoginModal(true);
       return;
     }
@@ -200,6 +214,20 @@ export default function App() {
     return <div className="app-loading drag-region"><div className="app-loading-mark" aria-hidden>V</div><span>{t('common', 'loading')}</span></div>;
   }
 
+  if (!isAuthenticated && !isElectronApp) {
+    return (
+      <LandingPage
+        loginContext={loginContext}
+        onOpenLogin={(context = 'generic') => {
+          setLoginContext(context);
+          setShowLoginModal(true);
+        }}
+        onCloseLogin={() => setShowLoginModal(false)}
+        showLogin={showLoginModal}
+      />
+    );
+  }
+
   const pageTitle = activeView === 'workspace'
     ? t('navigation', 'workspace')
     : activeView === 'billing'
@@ -219,7 +247,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             role="dialog"
             aria-modal="true"
-            aria-label={t('login', 'title')}
+            aria-labelledby="auth-modal-title"
           >
             <motion.div
               className="auth-modal"
@@ -237,7 +265,7 @@ export default function App() {
               >
                 <X />
               </button>
-              <Login />
+              <Login context={loginContext} />
             </motion.div>
           </motion.div>
         )}
@@ -253,7 +281,7 @@ export default function App() {
               <p>{t('billing', 'contentLockedDetail')}</p>
               <div className="confirm-actions">
                 <button type="button" className="button button-secondary" onClick={() => setShowContentPaywall(false)}>{t('billing', 'continueBrowsing')}</button>
-                <button type="button" className="button button-primary" onClick={() => { setShowContentPaywall(false); setActiveView('billing'); }}>{t('billing', 'viewPlans')}<ArrowUpRight /></button>
+                <button type="button" className="button button-primary" onClick={() => { setShowContentPaywall(false); setActiveView('billing'); }}>{t('billing', 'viewVoxaPro')}<ArrowUpRight /></button>
               </div>
             </motion.div>
           </motion.div>
@@ -268,6 +296,11 @@ export default function App() {
         <Sidebar
           activeView={activeView}
           onViewChange={(view) => {
+            if (view === 'billing' && !isAuthenticated) {
+              setLoginContext('billing');
+              setShowLoginModal(true);
+              return;
+            }
             setActiveView(view);
             if (view === 'workspace') setSelectedRecordingId(null);
           }}
@@ -290,6 +323,11 @@ export default function App() {
                 type="button"
                 className="button button-secondary"
                 onClick={() => {
+                  if (!isAuthenticated) {
+                    setLoginContext('import_transcript');
+                    setShowLoginModal(true);
+                    return;
+                  }
                   setSelectedRecordingId(null);
                   setIsImportDialogOpen(true);
                 }}
@@ -333,6 +371,11 @@ export default function App() {
                   }}
                   onSelectRecording={handleSelectRecording}
                   onRecordingComplete={handleRecordingComplete}
+                  onImportTranscript={() => {
+                    setSelectedRecordingId(null);
+                    setActiveView('library');
+                    setIsImportDialogOpen(true);
+                  }}
                 />
               </motion.div>
             ) : activeView === 'billing' ? (
@@ -358,7 +401,14 @@ export default function App() {
                   onRetry={loadRecordings}
                   onStartRecording={() => setActiveView('workspace')}
                   isImportDialogOpen={isImportDialogOpen}
-                  onImportDialogOpenChange={setIsImportDialogOpen}
+                  onImportDialogOpenChange={(open) => {
+                    if (open && !isAuthenticated) {
+                      setLoginContext('import_transcript');
+                      setShowLoginModal(true);
+                      return;
+                    }
+                    setIsImportDialogOpen(open);
+                  }}
                   autoProcess={autoProcessRecordingId === selectedRecordingId}
                 />
               </motion.div>
