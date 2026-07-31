@@ -49,10 +49,14 @@ const sample = {
       coherence: { score: 8, observation: 'Connects actions to results clearly.', evidence: evidence('Alex', 'We changed the import rule and reduced failed imports by thirty percent') },
       interaction: { score: 8, observation: 'Responds directly and asks a relevant closing question.', evidence: evidence('Alex', 'How will success be measured in the first ninety days') },
       intelligibility: { score: null, observation: '', evidence: [] },
-    }, strengths: [{ signal: 'Concrete professional vocabulary', whyItMatters: 'Makes delivery experience easy to follow.', evidence: evidence('Alex', 'I owned the migration plan and reduced failed imports by thirty percent') }], priorities: [{ signal: 'Past-tense consistency', pattern: 'Switches tense inside a completed narrative.', communicationImpact: 'The timeline becomes less precise.', nextStep: 'Retell the project using five fixed past-tense milestones.', evidence: evidence('Alex', 'Last year I lead the migration and now I fixed the import errors') }], participation: { share: 'balanced', interactionPattern: 'Answers fully and asks one relevant question.', evidence: evidence('Alex', 'How will success be measured in the first ninety days') }, teacherFeedback: 'Keep the technical specificity and stabilize the project timeline.' }],
-    languagePatterns: [{ category: 'grammar', pattern: 'Past-tense switching', frequency: 'repeated', impact: 'Weakens chronology in completed project stories.', evidence: evidence('Alex', 'Last year I lead the migration and now I fixed the import errors') }],
-    corrections: [{ speaker: 'Alex', category: 'grammar', original: 'Last year I lead the migration', corrected: 'Last year I led the migration', explanation: 'Use the irregular past form for a completed event.', rule: 'lead becomes led in the past', recurrence: 'repeated', priority: 'high', evidence: evidence('Alex', 'Last year I lead the migration') }],
-    lessonProgress: { successfulUse: [{ skill: 'Quantified an outcome clearly.', whySuccessful: 'The metric makes the result concrete.', evidence: evidence('Alex', 'reduced failed imports by thirty percent') }], selfCorrections: [{ observation: 'Repaired the verb form after noticing the error.', significance: 'Shows active monitoring.', evidence: evidence('Alex', 'I lead, sorry, I led the migration') }], missedOpportunities: [{ opportunity: 'Add a causal connector before the result.', coachPrompt: 'Try again using therefore or as a result.', evidence: evidence('Alex', 'The validation failed. We changed the import rule') }] },
+    }, strengths: [{ signal: 'Concrete professional vocabulary', whyItMatters: 'Makes delivery experience easy to follow.', evidence: evidence('Alex', 'I owned the migration plan and reduced failed imports by thirty percent') }], priorities: [{ signal: 'Past-tense consistency', pattern: 'Switches tense inside a completed narrative.', communicationImpact: 'The timeline becomes less precise.', nextStep: 'Retell the project using five fixed past-tense milestones.', evidence: evidence('Alex', 'Last year I lead the migration and now I fixed the import errors') }], participation: { share: 'balanced', interactionPattern: 'Answers fully and asks one relevant question.', evidence: evidence('Alex', 'How will success be measured in the first ninety days') }, teacherFeedback: 'Keep the technical specificity and stabilize the project timeline.' }, { speaker: 'Morgan', cefr: { level: 'C1', confidence: 'medium', rationale: 'Morgan gives concise instructions and frames decisions clearly.' }, evidenceSufficiency: 'medium', overallAssessment: 'Clear facilitation with a small opportunity to simplify long prompts.', skills: { grammar: { score: 9, observation: 'Consistently accurate.', evidence: evidence('Morgan', 'We will split the migration into two stages') }, vocabulary: { score: 8, observation: 'Precise delivery vocabulary.', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') } }, strengths: [], priorities: [], teacherFeedback: 'Keep instructions short and decision-oriented.' }],
+    languagePatterns: [
+      { speaker: 'Alex', category: 'grammar', pattern: 'Past-tense switching', frequency: 'repeated', impact: 'Weakens chronology in completed project stories.', evidence: evidence('Alex', 'Last year I lead the migration and now I fixed the import errors') },
+      { speaker: 'Morgan', category: 'coherence', pattern: 'Decision-first framing', frequency: 'repeated', impact: 'Makes the next action easy to identify.', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') },
+      { category: 'interaction', pattern: 'Shared technical vocabulary', frequency: 'observed', impact: 'Both participants use the same migration terms.', evidence: [{ speaker: 'Alex', quote: 'migration plan' }, { speaker: 'Morgan', quote: 'migration sequence' }] },
+    ],
+    corrections: [{ speaker: 'Alex', category: 'grammar', original: 'Last year I lead the migration', corrected: 'Last year I led the migration', explanation: 'Use the irregular past form for a completed event.', rule: 'lead becomes led in the past', recurrence: 'repeated', priority: 'high', evidence: evidence('Alex', 'Last year I lead the migration') }, { speaker: 'Morgan', category: 'grammar', original: 'We need approve the threshold', corrected: 'We need to approve the threshold', explanation: 'Use the infinitive with “to” after “need”.', priority: 'medium', evidence: evidence('Morgan', 'We need approve the threshold') }],
+    lessonProgress: { successfulUse: [{ skill: 'Quantified an outcome clearly.', whySuccessful: 'The metric makes the result concrete.', evidence: evidence('Alex', 'reduced failed imports by thirty percent') }, { skill: 'Aligned on shared terminology.', whySuccessful: 'Both speakers used consistent migration language.', evidence: [{ speaker: 'Alex', quote: 'migration plan' }, { speaker: 'Morgan', quote: 'migration sequence' }] }], selfCorrections: [{ observation: 'Repaired the verb form after noticing the error.', significance: 'Shows active monitoring.', evidence: evidence('Alex', 'I lead, sorry, I led the migration') }], missedOpportunities: [{ opportunity: 'Add a causal connector before the result.', coachPrompt: 'Try again using therefore or as a result.', evidence: evidence('Alex', 'The validation failed. We changed the import rule') }] },
     teacherPlan: { reinforce: [{ focus: 'Measured outcomes', reason: 'The learner already uses metrics effectively.', evidence: evidence('Alex', 'reduced failed imports by thirty percent') }], nextLessonFocus: [{ focus: 'Stable project chronology', why: 'Tense changes blur completed events.', activities: ['Timeline retell with five milestones', 'Rapid past-form repair drill'], successMetric: 'Maintain past tense across a two-minute story.', evidence: evidence('Alex', 'Last year I lead the migration and now I fixed the import errors') }], homework: [{ task: 'Record a two-minute project story', durationMinutes: 10, successMetric: 'Use five past-tense verbs and two causal connectors.', basedOn: 'Chronology and connector gaps.', evidence: evidence('Alex', 'The validation failed. We changed the import rule') }] },
   },
   meeting: {
@@ -71,6 +75,19 @@ const sample = {
     nextMeeting: { recommended: true, objective: 'Approve the threshold and confirm vendor coverage.', timing: null, participants: [], agenda: ['Threshold decision', 'Vendor escalation path'], rationale: 'Two execution dependencies remain open.' },
   },
 };
+
+for (let index = 3; index <= 30; index += 1) {
+  sample.languageClass.learnerProfiles.push({
+    speaker: `Participant ${index}`,
+    cefr: { level: 'B1', confidence: 'low', rationale: 'Scale fixture with limited participant evidence.' },
+    evidenceSufficiency: 'low',
+    overallAssessment: 'No participant-specific language items in this preview.',
+    skills: {},
+    strengths: [],
+    priorities: [],
+    teacherFeedback: 'Collect more evidence before assigning a detailed profile.',
+  } as any);
+}
 
 const previewReferenceCount = (() => {
   let count = 0;
@@ -111,6 +128,13 @@ const transcriptSegments = [{
   text: 'Last year I lead the migration',
   startMs: 12500,
   endMs: 15300,
+}, {
+  id: 'preview-morgan-grammar-segment',
+  position: 1,
+  speaker: 'Morgan',
+  text: 'We need approve the threshold',
+  startMs: 15800,
+  endMs: 17900,
 }];
 
 export default function InsightsPreview() {

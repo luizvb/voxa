@@ -14,6 +14,7 @@ import {
   Download,
   Loader2,
   Pause,
+  Pencil,
   Play,
   RefreshCw,
   Search,
@@ -80,6 +81,10 @@ function formatDuration(ms: number) {
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
+}
+
+function hasGenericSpeakerNames(speakers: string[]): boolean {
+  return speakers.some((speaker) => /^Speaker\s+\d+$/i.test(speaker.trim()));
 }
 
 type TranscriptDocumentProps = {
@@ -396,6 +401,7 @@ export default function HistoryView({
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
   const [speakerNameDrafts, setSpeakerNameDrafts] = useState<Record<string, string>>({});
   const [speakerNameStatus, setSpeakerNameStatus] = useState('');
+  const [speakerNamesExpanded, setSpeakerNamesExpanded] = useState(true);
   const [isSavingSpeakerNames, setIsSavingSpeakerNames] = useState(false);
   const [pdfStatus, setPdfStatus] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -425,6 +431,8 @@ export default function HistoryView({
   const decodedAudioRef = useRef<{ source: string; buffer: AudioBuffer } | null>(null);
   const autoProcessAttemptedRef = useRef<string | null>(null);
   const pronunciationSpeechRequestRef = useRef(0);
+  const speakerNamesCollapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editSpeakerNamesButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const selected = recordings.find((recording) => recording.id === selectedId);
   const sortedRecordings = useMemo(
@@ -499,12 +507,20 @@ export default function HistoryView({
 
   useEffect(() => {
     pronunciationSpeechRequestRef.current += 1;
+    if (speakerNamesCollapseTimerRef.current) {
+      clearTimeout(speakerNamesCollapseTimerRef.current);
+      speakerNamesCollapseTimerRef.current = null;
+    }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
     setSpeakingPronunciationWordKey(null);
     return () => {
       pronunciationSpeechRequestRef.current += 1;
+      if (speakerNamesCollapseTimerRef.current) {
+        clearTimeout(speakerNamesCollapseTimerRef.current);
+        speakerNamesCollapseTimerRef.current = null;
+      }
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -528,6 +544,7 @@ export default function HistoryView({
       setSelectedSpeakers([]);
       setSpeakerNameDrafts({});
       setSpeakerNameStatus('');
+      setSpeakerNamesExpanded(true);
 
       if (!selected.transcript) {
         setTranscriptData({ isTranscribing: false, status: t('history', 'noTranscript') });
@@ -548,6 +565,7 @@ export default function HistoryView({
         setDetectedSpeakers(speakers);
         setSelectedSpeakers(speakers);
         setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
+        setSpeakerNamesExpanded(hasGenericSpeakerNames(speakers));
 
         try {
           const history = await platform.listAnalyses(selected.id);
@@ -639,6 +657,7 @@ export default function HistoryView({
         setDetectedSpeakers(speakers);
         setSelectedSpeakers(speakers);
         setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
+        setSpeakerNamesExpanded(hasGenericSpeakerNames(speakers));
         await loadRecordings();
 
         if (speakers.length) {
@@ -808,6 +827,7 @@ export default function HistoryView({
       setSelectedSpeakers(speakers);
       setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
       setSpeakerNameStatus(speakers.length ? t('history', 'nameSpeakersBeforeInsights') : '');
+      setSpeakerNamesExpanded(hasGenericSpeakerNames(speakers));
       await loadRecordings();
     } catch (error: any) {
       setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true });
@@ -834,9 +854,21 @@ export default function HistoryView({
       setSelectedSpeakers(renamedSelectedSpeakers);
       setSpeakerNameDrafts(Object.fromEntries(nextSpeakers.map((speaker) => [speaker, speaker])));
       setSpeakerNameStatus(t('history', 'speakerNamesSaved'));
+      setSpeakerNamesExpanded(true);
+      if (speakerNamesCollapseTimerRef.current) clearTimeout(speakerNamesCollapseTimerRef.current);
+      speakerNamesCollapseTimerRef.current = setTimeout(() => {
+        setSpeakerNamesExpanded(false);
+        speakerNamesCollapseTimerRef.current = null;
+        window.requestAnimationFrame(() => editSpeakerNamesButtonRef.current?.focus());
+      }, 900);
       return renamedSelectedSpeakers;
     } catch (error: unknown) {
+      if (speakerNamesCollapseTimerRef.current) {
+        clearTimeout(speakerNamesCollapseTimerRef.current);
+        speakerNamesCollapseTimerRef.current = null;
+      }
       setSpeakerNameStatus(error instanceof Error ? error.message : t('history', 'speakerNamesSaveFailed'));
+      setSpeakerNamesExpanded(true);
       setActiveTab('transcript');
       throw error;
     } finally {
@@ -1195,14 +1227,23 @@ export default function HistoryView({
                 ) : transcriptData.markdown ? (
                   <>
                   {!!detectedSpeakers.length && (
-                    <section className="speaker-name-panel" aria-labelledby="speaker-name-title">
+                    <section className={`speaker-name-panel${speakerNamesExpanded ? '' : ' is-collapsed'}`} aria-labelledby="speaker-name-title">
                       <header>
                         <div><Users aria-hidden="true" /><div><h3 id="speaker-name-title">{t('history', 'nameSpeakers')}</h3><p>{t('history', 'nameSpeakersDescription')}</p></div></div>
-                        <button type="button" className="button button-secondary" onClick={() => void saveSpeakerNames()} disabled={!speakerNamesDirty || !speakerNamesValid || isSavingSpeakerNames}>
-                          {isSavingSpeakerNames ? <Loader2 className="spin" /> : <Save />}{t('history', 'saveSpeakerNames')}
-                        </button>
+                        {speakerNamesExpanded ? (
+                          <div className="speaker-name-actions">
+                            <button type="button" className="button button-secondary" onClick={() => { if (speakerNamesCollapseTimerRef.current) clearTimeout(speakerNamesCollapseTimerRef.current); speakerNamesCollapseTimerRef.current = null; setSpeakerNameDrafts(Object.fromEntries(detectedSpeakers.map((speaker) => [speaker, speaker]))); setSpeakerNameStatus(''); setSpeakerNamesExpanded(false); }} disabled={isSavingSpeakerNames}>
+                              <Check />{t('history', 'keepSpeakerNames')}
+                            </button>
+                            <button type="button" className="button button-secondary" onClick={() => { void saveSpeakerNames().catch(() => undefined); }} disabled={!speakerNamesDirty || !speakerNamesValid || isSavingSpeakerNames}>
+                              {isSavingSpeakerNames ? <Loader2 className="spin" /> : <Save />}{t('history', 'saveSpeakerNames')}
+                            </button>
+                          </div>
+                        ) : (
+                          <button ref={editSpeakerNamesButtonRef} type="button" className="button button-secondary" onClick={() => { if (speakerNamesCollapseTimerRef.current) clearTimeout(speakerNamesCollapseTimerRef.current); speakerNamesCollapseTimerRef.current = null; setSpeakerNamesExpanded(true); }}><Pencil />{t('history', 'editSpeakerNames')}</button>
+                        )}
                       </header>
-                      <div className="speaker-name-grid">
+                      {speakerNamesExpanded ? <div className="speaker-name-grid">
                         {detectedSpeakers.map((speaker) => (
                           <label key={speaker}>
                             <span>{speaker === 'Speaker 0' ? `${speaker} · ${t('history', 'you')}` : speaker}</span>
@@ -1217,9 +1258,9 @@ export default function HistoryView({
                             />
                           </label>
                         ))}
-                      </div>
-                      {!speakerNamesValid && <p className="config-error" role="alert">{t('history', 'speakerNamesInvalid')}</p>}
-                      {speakerNameStatus && <p className="speaker-name-status" role="status">{speakerNameStatus}</p>}
+                      </div> : <p className="speaker-name-summary">{detectedSpeakers.join(' · ')}</p>}
+                      {speakerNamesExpanded && !speakerNamesValid && <p className="config-error" role="alert">{t('history', 'speakerNamesInvalid')}</p>}
+                      {speakerNameStatus && <p className={`speaker-name-status${speakerNamesExpanded && speakerNamesDirty ? ' is-error' : ''}`} role={speakerNamesExpanded && speakerNamesDirty ? 'alert' : 'status'}>{speakerNameStatus}</p>}
                     </section>
                   )}
                   <TranscriptDocument

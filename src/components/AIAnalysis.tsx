@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { normalizeAnalysisReport } from '../lib/analysis-report';
+import { collectLanguageParticipants, scopeLanguageItems, type LanguageItemScope } from '../lib/language-attribution';
 import { findTranscriptSegmentForCorrection } from '../lib/transcript-segment-match';
 import type { TranscriptSegment } from '../platform';
 
@@ -116,6 +117,10 @@ function ContextStrip({ items }: { items: Array<{ label: string; value: any }> }
   const visible = items.filter((item) => item.value !== null && item.value !== undefined && item.value !== '' && (!Array.isArray(item.value) || item.value.length));
   if (!visible.length) return null;
   return <dl className="analysis-context-strip">{visible.map((item) => <div key={item.label}><dt>{item.label}</dt><dd>{Array.isArray(item.value) ? item.value.join(', ') : String(item.value)}</dd></div>)}</dl>;
+}
+
+function ScopeLabel({ scope, t }: { scope: LanguageItemScope; t: any }) {
+  return scope === 'general' ? <span className="general-context-label">{t('ai', 'generalContext')}</span> : null;
 }
 
 function SignalRegister({ title, icon, items, fallback, evidenceLabel, tone = '' }: { title: string; icon: any; items: any[]; fallback: string; evidenceLabel: string; tone?: string }) {
@@ -215,10 +220,23 @@ function LanguageReport({
   onPauseRecordingAudio,
 }: LanguageReportProps) {
   const lesson = languageClass.lessonContext || languageClass.lessonBrief || {};
-  const profiles = (asArray(languageClass.learnerProfiles).length
-    ? asArray(languageClass.learnerProfiles)
+  const learnerProfiles = asArray(languageClass.learnerProfiles);
+  const profiles = (learnerProfiles.length
+    ? learnerProfiles
     : legacySpeakers.map((speaker) => ({ speaker: speaker.id, cefrEstimate: speaker.language?.cefrEstimate || speaker.proficiency?.level, scores: speaker.language?.scores || {}, strengths: asArray(speaker.language?.strengths).map((insight: string) => ({ signal: insight })), priorities: asArray(speaker.language?.improvements).map((insight: string) => ({ signal: insight })), teacherFeedback: speaker.language?.feedback || speaker.feedback }))).map(normalizeLearner);
-  const [activeLearner, setActiveLearner] = useState(profiles[0]?.speaker || '');
+  const progress = languageClass.lessonProgress || {};
+  const teacherPlan = languageClass.teacherPlan || languageClass.teacherBrief || {};
+  const patterns = asArray(languageClass.languagePatterns).length ? asArray(languageClass.languagePatterns) : asArray(progress.recurringPatterns);
+  const corrections = asArray(languageClass.corrections);
+  const participants = collectLanguageParticipants({
+    learnerProfiles,
+    legacySpeakers,
+    languagePatterns: patterns,
+    corrections,
+    lessonProgress: progress,
+    teacherPlan: { ...teacherPlan, studyPlan: languageClass.studyPlan },
+  });
+  const [activeLearner, setActiveLearner] = useState(participants[0] || '');
   const [speakingCorrectionKey, setSpeakingCorrectionKey] = useState<string | null>(null);
   const [grammarQueue, setGrammarQueue] = useState({ isPlaying: false, index: 0, total: 0 });
   const [speechSupported] = useState(() => typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window);
@@ -226,25 +244,19 @@ function LanguageReport({
   const grammarQueueRef = useRef<{ key: string; phrase: string }[]>([]);
   const grammarQueuePlayingRef = useRef(false);
   const learnerTabsId = useId().replaceAll(':', '');
-  const corrections = asArray(languageClass.corrections);
-  const correctionSpeakers = [...new Set(corrections.map((item) => String(item?.speaker || '').trim()).filter(Boolean))];
-  const [activeCorrectionSpeaker, setActiveCorrectionSpeaker] = useState(correctionSpeakers[0] || '');
-  const visibleCorrections = activeCorrectionSpeaker
-    ? corrections.filter((item) => String(item?.speaker || '').toLocaleLowerCase() === activeCorrectionSpeaker.toLocaleLowerCase())
-    : corrections;
+  const selectedSpeaker = participants.find((speaker) => speaker.toLocaleLowerCase() === activeLearner.toLocaleLowerCase()) || participants[0] || '';
+  const learner = profiles.find((item) => String(item.speaker || '').toLocaleLowerCase() === selectedSpeaker.toLocaleLowerCase());
+  const visibleCorrections = scopeLanguageItems(corrections, selectedSpeaker);
   const queuedGrammarCorrections = visibleCorrections
-    .map((item, index) => ({
-      key: `${item.original}-${corrections.indexOf(item)}-${index}`,
+    .filter((entry) => entry.scope === 'participant')
+    .map(({ item }) => ({
+      key: `${item.original}-${corrections.indexOf(item)}`,
       phrase: typeof item.corrected === 'string' ? item.corrected.trim() : '',
       category: String(item.category || '').toLocaleLowerCase(),
     }))
     .filter((item) => grammarAudioEnabled && item.category === 'grammar' && item.phrase);
-  useEffect(() => { if (!profiles.some((item) => item.speaker === activeLearner)) setActiveLearner(profiles[0]?.speaker || ''); }, [activeLearner, profiles]);
-  useEffect(() => {
-    if (correctionSpeakers.some((speaker) => speaker === activeCorrectionSpeaker)) return;
-    const learnerSpeaker = correctionSpeakers.find((speaker) => speaker === activeLearner);
-    setActiveCorrectionSpeaker(learnerSpeaker || correctionSpeakers[0] || '');
-  }, [activeCorrectionSpeaker, activeLearner, correctionSpeakers]);
+  const grammarQueueProgress = `${Math.min(grammarQueue.index + 1, grammarQueue.total)} ${t('ai', 'queueOf')} ${grammarQueue.total}`;
+  useEffect(() => { if (!participants.some((speaker) => speaker.toLocaleLowerCase() === activeLearner.toLocaleLowerCase())) setActiveLearner(participants[0] || ''); }, [activeLearner, participants]);
   useEffect(() => () => {
     speechRequestRef.current += 1;
     grammarQueuePlayingRef.current = false;
@@ -255,7 +267,7 @@ function LanguageReport({
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
     setSpeakingCorrectionKey(null);
     grammarQueuePlayingRef.current = false;
-    setGrammarQueue((current) => ({ ...current, isPlaying: false }));
+    setGrammarQueue({ isPlaying: false, index: 0, total: 0 });
   };
   const speakCorrection = (key: string, phrase: string, onFinished?: () => void) => {
     if (!speechSupported) return;
@@ -307,69 +319,47 @@ function LanguageReport({
     grammarQueuePlayingRef.current = true;
     playGrammarQueueItem(0);
   };
-  const selectLearnerFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const nextIndex = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? profiles.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + profiles.length) % profiles.length;
-    const nextLearner = profiles[nextIndex]?.speaker;
-    if (!nextLearner) return;
-    setActiveLearner(nextLearner);
-    if (correctionSpeakers.includes(nextLearner)) {
-      stopBrowserSpeech();
-      setActiveCorrectionSpeaker(nextLearner);
-    }
-    document.getElementById(`${learnerTabsId}-tab-${nextIndex}`)?.focus();
-  };
-  const learner = profiles.find((item) => item.speaker === activeLearner) || profiles[0];
-  const progress = languageClass.lessonProgress || {};
-  const teacherPlan = languageClass.teacherPlan || languageClass.teacherBrief || {};
-  const patterns = asArray(languageClass.languagePatterns).length ? asArray(languageClass.languagePatterns) : asArray(progress.recurringPatterns);
+  const visiblePatterns = scopeLanguageItems(patterns, selectedSpeaker);
+  const visibleSuccessfulUse = scopeLanguageItems(asArray(progress.successfulUse), selectedSpeaker);
+  const visibleSelfCorrections = scopeLanguageItems(asArray(progress.selfCorrections), selectedSpeaker);
+  const visibleMissedOpportunities = scopeLanguageItems(asArray(progress.missedOpportunities), selectedSpeaker);
+  const visibleReinforce = scopeLanguageItems(asArray(teacherPlan.reinforce || teacherPlan.whatToReinforce), selectedSpeaker);
+  const visibleNextLessonFocus = scopeLanguageItems(asArray(teacherPlan.nextLessonFocus || languageClass.studyPlan), selectedSpeaker);
+  const visibleHomework = scopeLanguageItems(asArray(teacherPlan.homework), selectedSpeaker);
   return (
-    <section className="analysis-mode-section mode-language">
+    <section className={`analysis-mode-section mode-language${grammarQueue.isPlaying ? ' has-playing-queue' : ''}`}>
       <SectionHeading icon={BookOpen} title={t('ai', 'languageAnalysis')} description={t('ai', 'languageTeacherDescription')} />
+      {!!participants.length && <label className="language-participant-focus" id={`${learnerTabsId}-label`}><span>{t('ai', 'participantFocus')}</span><select value={selectedSpeaker} onChange={(event) => { stopBrowserSpeech(); setActiveLearner(event.target.value); }}>{participants.map((speaker) => <option key={speaker.toLocaleLowerCase()} value={speaker}>{speaker}</option>)}</select></label>}
+      {grammarQueue.isPlaying && <div className="grammar-queue-toolbar is-playing"><div className="grammar-queue-now" aria-live="polite"><span>{selectedSpeaker} · {t('ai', 'grammar')} · {grammarQueueProgress}</span><strong>{queuedGrammarCorrections[grammarQueue.index]?.phrase}</strong></div><div className="grammar-queue-action"><button type="button" onClick={toggleGrammarQueue} aria-pressed="true"><Square aria-hidden="true" /><span>{t('ai', 'stopGrammarQueue')}</span></button></div></div>}
       <ReportDisclosure title={t('ai', 'learnerAssessment')} icon={BookOpen}>
       {lesson.executiveBrief && <section className="manager-brief"><small>{t('ai', 'executiveBrief')}</small><h4>{lesson.executiveBrief}</h4><Evidence items={lesson.evidence} label={t('ai', 'showEvidence')} /></section>}
 
-      {!!profiles.length && <><div className="speaker-tabs" role="tablist" aria-label={t('ai', 'learners')}>{profiles.map((item, index) => <button type="button" role="tab" id={`${learnerTabsId}-tab-${index}`} aria-controls={`${learnerTabsId}-panel`} aria-selected={activeLearner === item.speaker} tabIndex={activeLearner === item.speaker ? 0 : -1} key={item.speaker} className={activeLearner === item.speaker ? 'is-active' : ''} onKeyDown={(event) => selectLearnerFromKeyboard(event, index)} onClick={() => { setActiveLearner(item.speaker); if (correctionSpeakers.includes(item.speaker)) { stopBrowserSpeech(); setActiveCorrectionSpeaker(item.speaker); } }}>{item.speaker}</button>)}</div>{learner && <section className="learner-profile" id={`${learnerTabsId}-panel`} role="tabpanel" aria-labelledby={`${learnerTabsId}-tab-${profiles.findIndex((item) => item.speaker === learner.speaker)}`}><header><div><small>{t('ai', 'learnerAssessment')}</small><h4>{learner.speaker}</h4><p>{learner.overallAssessment || learner.teacherFeedback}</p>{learner.highestLeverageChange && <p className="next-question"><b>{t('ai', 'highestLeverageChange')}:</b> {learner.highestLeverageChange}</p>}</div><div className="learner-level"><strong>{learner.cefr?.level || 'unknown'}</strong><span>CEFR</span><small>{level(learner.cefr?.confidence || learner.evidenceSufficiency)}</small></div></header>{learner.cefr?.rationale && <p className="cefr-rationale">{learner.cefr.rationale}</p>}<div className="skill-table">{Object.entries(learner.skills || {}).map(([key, value]: [string, any]) => <article key={key}><header><strong>{t('ai', key)}</strong><b>{score(value?.score, fallback)}</b></header><p>{value?.observation || fallback}</p><Evidence items={value?.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div className="analysis-register-grid"><SignalRegister title={t('ai', 'whatToReinforce')} icon={CheckCircle2} items={asArray(learner.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" /><SignalRegister title={t('ai', 'priorityGaps')} icon={TrendingUp} items={asArray(learner.priorities).map((item) => ({ ...item, demonstratedBy: item.pattern, hiringRelevance: item.communicationImpact || item.impact, verificationQuestion: item.nextStep }))} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" /></div>{learner.participation && <div className="participation-note"><b>{t('ai', 'participation')}:</b> {level(learner.participation.share)}. {learner.participation.interactionPattern}<Evidence items={learner.participation.evidence} label={t('ai', 'showEvidence')} /></div>}</section>}</>}
+      {learner ? <section className="learner-profile" id={`${learnerTabsId}-panel`} aria-labelledby={`${learnerTabsId}-label`}><header><div><small>{t('ai', 'learnerAssessment')}</small><h4>{learner.speaker}</h4><p>{learner.overallAssessment || learner.teacherFeedback}</p>{learner.highestLeverageChange && <p className="next-question"><b>{t('ai', 'highestLeverageChange')}:</b> {learner.highestLeverageChange}</p>}</div><div className="learner-level"><strong>{learner.cefr?.level || 'unknown'}</strong><span>CEFR</span><small>{level(learner.cefr?.confidence || learner.evidenceSufficiency)}</small></div></header>{learner.cefr?.rationale && <p className="cefr-rationale">{learner.cefr.rationale}</p>}<div className="skill-table">{Object.entries(learner.skills || {}).map(([key, value]: [string, any]) => <article key={key}><header><strong>{t('ai', key)}</strong><b>{score(value?.score, fallback)}</b></header><p>{value?.observation || fallback}</p><Evidence items={value?.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div className="analysis-register-grid"><SignalRegister title={t('ai', 'whatToReinforce')} icon={CheckCircle2} items={asArray(learner.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" /><SignalRegister title={t('ai', 'priorityGaps')} icon={TrendingUp} items={asArray(learner.priorities).map((item) => ({ ...item, demonstratedBy: item.pattern, hiringRelevance: item.communicationImpact || item.impact, verificationQuestion: item.nextStep }))} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" /></div>{learner.participation && <div className="participation-note"><b>{t('ai', 'participation')}:</b> {level(learner.participation.share)}. {learner.participation.interactionPattern}<Evidence items={learner.participation.evidence} label={t('ai', 'showEvidence')} /></div>}</section> : selectedSpeaker ? <section className="learner-profile-empty" id={`${learnerTabsId}-panel`} aria-labelledby={`${learnerTabsId}-label`}><h4>{selectedSpeaker}</h4><p>{t('ai', 'noProfileForParticipant')}</p></section> : <p className="analysis-muted">{t('ai', 'noProfileForParticipant')}</p>}
       </ReportDisclosure>
 
-      <ReportDisclosure title={t('ai', 'patternsAndCorrections')} icon={Layers3} count={patterns.length + asArray(languageClass.corrections).length}>
-      <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'languagePatterns')} count={patterns.length} /><div className="pattern-table">{patterns.map((item, index) => <article key={`${item.pattern}-${index}`}><header><span>{level(item.category || item.frequency)}</span><strong>{item.pattern}</strong><b>{level(item.frequency)}</b></header><p>{item.impact}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
+      <ReportDisclosure title={t('ai', 'patternsAndCorrections')} icon={Layers3} count={visiblePatterns.length + visibleCorrections.length}>
+      <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'languagePatterns')} count={visiblePatterns.length} />{visiblePatterns.length ? <div className="pattern-table">{visiblePatterns.map(({ item, scope }, index) => <article key={`${item.pattern}-${index}`}><header><span>{level(item.category || item.frequency)}</span><strong>{item.pattern}</strong><b>{level(item.frequency)}</b></header><ScopeLabel scope={scope} t={t} /><p>{item.impact}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div> : <p className="analysis-muted">{t('ai', 'noPatternsForParticipant')}</p>}</section>
 
       <section className="analysis-register">
         <RegisterHeading icon={ShieldCheck} title={t('ai', 'corrections')} count={visibleCorrections.length} />
-        {!!correctionSpeakers.length && (
+        {!grammarQueue.isPlaying && !!visibleCorrections.length && (
           <div className="grammar-queue-toolbar">
-            <div className="correction-speaker-tabs" role="group" aria-label={t('ai', 'grammarByParticipant')}>
-              {correctionSpeakers.map((speaker) => (
-                <button
-                  type="button"
-                  aria-pressed={activeCorrectionSpeaker === speaker}
-                  className={activeCorrectionSpeaker === speaker ? 'is-active' : ''}
-                  key={speaker}
-                  onClick={() => {
-                    stopBrowserSpeech();
-                    setActiveCorrectionSpeaker(speaker);
-                  }}
-                >{speaker}</button>
-              ))}
+            <div className="grammar-queue-now" aria-live="polite">
+              <span>{selectedSpeaker} · {t('ai', 'grammar')} · {grammarQueue.isPlaying ? grammarQueueProgress : queuedGrammarCorrections.length}</span>
+              {grammarQueue.isPlaying && <strong>{queuedGrammarCorrections[grammarQueue.index]?.phrase}</strong>}
             </div>
             <div className="grammar-queue-action">
-              <span>{t('ai', 'grammar')} · {queuedGrammarCorrections.length}</span>
               <button type="button" onClick={toggleGrammarQueue} disabled={!speechSupported || queuedGrammarCorrections.length === 0} aria-pressed={grammarQueue.isPlaying}>
                 {grammarQueue.isPlaying ? <Square aria-hidden="true" /> : <Play aria-hidden="true" />}
-                <span>{grammarQueue.isPlaying ? `${t('ai', 'stopGrammarQueue')} ${Math.min(grammarQueue.index + 1, grammarQueue.total)}/${grammarQueue.total}` : t('ai', 'playAllGrammar')}</span>
+                <span>{grammarQueue.isPlaying ? `${t('ai', 'stopGrammarQueue')} · ${grammarQueueProgress}` : t('ai', 'playAllGrammar')}</span>
               </button>
+              {!speechSupported ? <small>{t('ai', 'speechUnavailable')}</small> : queuedGrammarCorrections.length === 0 ? <small>{t('ai', 'noPlayableGrammar')}</small> : null}
             </div>
           </div>
         )}
-        <div className="correction-list">
-          {visibleCorrections.map((item, index) => {
-            const correctionKey = `${item.original}-${corrections.indexOf(item)}-${index}`;
+        {visibleCorrections.length ? <div className="correction-list">
+          {visibleCorrections.map(({ item, scope }) => {
+            const correctionKey = `${item.original}-${corrections.indexOf(item)}`;
             const isGrammar = grammarAudioEnabled && String(item.category || '').toLowerCase() === 'grammar';
             const segment = isGrammar ? findTranscriptSegmentForCorrection(transcriptSegments, item) : undefined;
             const segmentKey = segment ? `grammar:${segment.id}` : '';
@@ -385,9 +375,9 @@ function LanguageReport({
             const originalIsPlaying = canPlayOriginal && activeAudioSegmentKey === segmentKey && isAudioPlaying;
             const correctionIsPlaying = speakingCorrectionKey === correctionKey;
             return (
-              <article className={showAudioComparison ? 'has-audio-comparison' : undefined} key={correctionKey}>
-                <header><span className={`priority priority-${item.priority || 'medium'}`}>{item.priority || 'medium'}</span><small>{item.speaker} {item.category ? `/ ${item.category}` : ''}</small></header>
-                <div><del>{item.original}</del><strong>{item.corrected}</strong></div>
+              <article className={`${showAudioComparison ? 'has-audio-comparison ' : ''}${grammarQueue.isPlaying && speakingCorrectionKey === correctionKey ? 'is-current' : ''}`.trim()} key={correctionKey}>
+                <header><span className={`priority priority-${item.priority || 'medium'}`}>{item.priority || 'medium'}</span><small>{scope === 'general' ? t('ai', 'generalContext') : selectedSpeaker} {item.category ? `/ ${item.category}` : ''}</small></header>
+                <div><p><small>{t('ai', 'youSaid')}</small><del>{item.original}</del></p><p><small>{t('ai', 'suggestedForm')}</small><strong>{item.corrected}</strong></p></div>
                 <p>{item.explanation}</p>
                 {item.rule && <small>{t('ai', 'rule')}: {item.rule}. {level(item.recurrence)}</small>}
                 <Evidence items={item.evidence} label={t('ai', 'showEvidence')} />
@@ -421,16 +411,16 @@ function LanguageReport({
               </article>
             );
           })}
-        </div>
+        </div> : <p className="analysis-muted">{t('ai', 'noCorrectionsForParticipant')}</p>}
       </section>
       </ReportDisclosure>
 
       <ReportDisclosure title={t('ai', 'lessonProgress')} icon={TrendingUp}>
-      <section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'lessonProgress')} /><div className="progress-columns"><div><h5>{t('ai', 'successfulUse')}</h5>{asArray(progress.successfulUse).map((item, index) => <article key={`${item.skill}-${index}`}><strong>{item.skill}</strong><p>{item.whySuccessful}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'selfCorrections')}</h5>{asArray(progress.selfCorrections).map((item, index) => <article key={`${item.observation}-${index}`}><strong>{item.observation}</strong><p>{item.significance}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'missedOpportunities')}</h5>{asArray(progress.missedOpportunities).map((item, index) => <article key={`${item.opportunity}-${index}`}><strong>{item.opportunity}</strong><p>{item.coachPrompt}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
+      <section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'lessonProgress')} /><div className="progress-columns"><div><h5>{t('ai', 'successfulUse')}</h5>{visibleSuccessfulUse.map(({ item, scope }, index) => <article key={`${item.skill}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.skill}</strong><p>{item.whySuccessful}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'selfCorrections')}</h5>{visibleSelfCorrections.map(({ item, scope }, index) => <article key={`${item.observation}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.observation}</strong><p>{item.significance}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'missedOpportunities')}</h5>{visibleMissedOpportunities.map(({ item, scope }, index) => <article key={`${item.opportunity}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.opportunity}</strong><p>{item.coachPrompt}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
       </ReportDisclosure>
 
       <ReportDisclosure title={t('ai', 'nextLessonPlan')} icon={CalendarClock}>
-      <section className="analysis-register coaching-register"><RegisterHeading icon={CalendarClock} title={t('ai', 'nextLessonPlan')} count={asArray(teacherPlan.nextLessonFocus).length} />{!!asArray(teacherPlan.reinforce || teacherPlan.whatToReinforce).length && <div className="reinforce-list"><h5>{t('ai', 'whatToReinforce')}</h5>{asArray(teacherPlan.reinforce || teacherPlan.whatToReinforce).map((item: any, index: number) => typeof item === 'string' ? <p key={item}>{item}</p> : <article key={`${item.focus}-${index}`}><strong>{item.focus}</strong><p>{item.reason}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}<div className="priority-list">{asArray(teacherPlan.nextLessonFocus || languageClass.studyPlan).map((item, index) => <article key={`${item.focus}-${index}`}><span>{index + 1}</span><div><strong>{item.focus}</strong><p>{item.why}</p><InsightList items={asArray(item.activities)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div>{!!asArray(teacherPlan.homework).length && <div className="homework-list"><h5>{t('ai', 'homework')}</h5>{asArray(teacherPlan.homework).map((item, index) => <article key={`${item.task}-${index}`}><strong>{item.task}</strong><span>{item.durationMinutes ? `${item.durationMinutes} min` : ''}</span><p>{item.basedOn}</p><small>{item.successMetric}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}</section>
+      <section className="analysis-register coaching-register"><RegisterHeading icon={CalendarClock} title={t('ai', 'nextLessonPlan')} count={visibleNextLessonFocus.length} />{!!visibleReinforce.length && <div className="reinforce-list"><h5>{t('ai', 'whatToReinforce')}</h5>{visibleReinforce.map(({ item, scope }, index) => typeof item === 'string' ? <p key={`${item}-${index}`}><ScopeLabel scope={scope} t={t} />{item}</p> : <article key={`${item.focus}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.reason}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}<div className="priority-list">{visibleNextLessonFocus.map(({ item, scope }, index) => <article key={`${item.focus}-${index}`}><span>{index + 1}</span><div><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.why}</p><InsightList items={asArray(item.activities)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div>{!!visibleHomework.length && <div className="homework-list"><h5>{t('ai', 'homework')}</h5>{visibleHomework.map(({ item, scope }, index) => <article key={`${item.task}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.task}</strong><span>{item.durationMinutes ? `${item.durationMinutes} min` : ''}</span><p>{item.basedOn}</p><small>{item.successMetric}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}</section>
       </ReportDisclosure>
     </section>
   );
@@ -512,7 +502,6 @@ export default function AIAnalysis({
   const quality = report.evidenceQuality || {};
   const summary = report.summary || {};
   const keyFindings = asArray(summary.keyFindings);
-  const citationSummary = quality.citationSummary || {};
   return (
     <article className="analysis-view" aria-labelledby={`${reportId}-title`}>
       <section className="analysis-hero" id={`${reportId}-overview`} tabIndex={-1}>

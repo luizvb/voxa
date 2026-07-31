@@ -213,6 +213,7 @@ test('analysis prompt requests every selected speaker and sanitizer filters part
   const prompt = buildAnalysisPrompt(transcript, { modes: ['language'], selectedSpeakers: ['Ana', 'Bruno'] });
   assert.match(prompt, /Participant-specific insights requested for: Ana, Bruno/);
   assert.match(prompt, /do not silently analyze only the first participant/);
+  assert.match(prompt, /When multiple participants are selected, speaker is mandatory/);
 
   const raw = buildAnalysisOutputContract(['language']);
   raw.languageClass.learnerProfiles = [
@@ -221,6 +222,57 @@ test('analysis prompt requests every selected speaker and sanitizer filters part
   ];
   const sanitized = sanitizeAnalysisResult(raw, transcript, ['language'], ['Bruno']);
   assert.deepEqual(sanitized.languageClass.learnerProfiles.map((profile) => profile.speaker), ['Bruno']);
+});
+
+test('multi-speaker language analyses require selected-label attribution in the new response schema', () => {
+  const schema = buildAnalysisJsonSchema(['language'], ['Ana', 'Bruno']);
+  const language = schema.properties.languageClass;
+  const expectedSpeaker = { type: 'string', enum: ['Ana', 'Bruno'] };
+
+  assert.deepEqual(language.properties.languagePatterns.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.lessonProgress.properties.successfulUse.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.lessonProgress.properties.selfCorrections.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.lessonProgress.properties.missedOpportunities.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.teacherPlan.properties.reinforce.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.teacherPlan.properties.nextLessonFocus.items.properties.speaker, expectedSpeaker);
+  assert.deepEqual(language.properties.teacherPlan.properties.homework.items.properties.speaker, expectedSpeaker);
+
+  const singleSpeakerSchema = buildAnalysisJsonSchema(['language'], ['Ana']);
+  assert.deepEqual(
+    singleSpeakerSchema.properties.languageClass.properties.languagePatterns.items.properties.speaker,
+    { type: ['string', 'null'] }
+  );
+});
+
+test('language insight attribution keeps selected and global items without inventing invalid speaker mappings', () => {
+  const transcript = 'Ana: I explain the plan clearly.\nBruno: I ask focused questions.';
+  const anaEvidence = [{ speaker: 'Ana', quote: 'I explain the plan clearly' }];
+  const brunoEvidence = [{ speaker: 'Bruno', quote: 'I ask focused questions' }];
+  const raw = buildAnalysisOutputContract(['language']);
+  raw.languageClass.languagePatterns = [
+    { speaker: 'ana', category: 'coherence', pattern: 'Clear sequencing', frequency: 'single', impact: 'Easy to follow.', evidence: anaEvidence },
+    { speaker: 'Unknown participant', category: 'interaction', pattern: 'Invalid attribution', frequency: 'single', impact: 'Must not leak.', evidence: brunoEvidence },
+    { category: 'interaction', pattern: 'Shared exchange', frequency: 'single', impact: 'Global legacy item.', evidence: brunoEvidence },
+    { speaker: null, category: 'register', pattern: 'Mixed register', frequency: 'single', impact: 'Shared item.', evidence: anaEvidence }
+  ];
+  raw.languageClass.lessonProgress.successfulUse = [
+    { speaker: 'Bruno', skill: 'Questioning', whySuccessful: 'Focused.', evidence: brunoEvidence },
+    { speaker: 'Invalid', skill: 'Invalid', whySuccessful: 'Invalid.', evidence: anaEvidence },
+    { skill: 'Collaboration', whySuccessful: 'Shared.', evidence: anaEvidence }
+  ];
+  raw.languageClass.teacherPlan.nextLessonFocus = [
+    { speaker: 'ANA', focus: 'Sequencing', why: 'Build clarity.', activities: [], successMetric: 'Clear plan.', evidence: anaEvidence },
+    { speaker: 'Invalid', focus: 'Invalid', why: 'Invalid.', activities: [], successMetric: 'Invalid.', evidence: anaEvidence },
+    { speaker: null, focus: 'Shared practice', why: 'Mixed exercise.', activities: [], successMetric: 'Both participate.', evidence: brunoEvidence }
+  ];
+
+  const sanitized = sanitizeAnalysisResult(raw, transcript, ['language'], ['Ana', 'Bruno']);
+  assert.deepEqual(sanitized.languageClass.languagePatterns.map((item) => item.speaker), ['Ana', null, null]);
+  assert.deepEqual(sanitized.languageClass.lessonProgress.successfulUse.map((item) => item.speaker), ['Bruno', null]);
+  assert.deepEqual(sanitized.languageClass.teacherPlan.nextLessonFocus.map((item) => item.speaker), ['Ana', null]);
+
+  const legacy = sanitizeAnalysisResult(raw, transcript, ['language']);
+  assert.equal(legacy.languageClass.languagePatterns[1].speaker, 'Unknown participant');
 });
 
 test('analysis sanitizer enforces mode isolation, score ranges and exact evidence', () => {

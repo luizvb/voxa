@@ -461,17 +461,17 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
         participation: { share: 'dominant|balanced|limited|unknown', interactionPattern: '', evidence: evidence() },
         teacherFeedback: ''
       }],
-      languagePatterns: [{ category: 'grammar|vocabulary|fluency|coherence|interaction|register', pattern: '', frequency: 'single|repeated', impact: '', evidence: evidence() }],
+      languagePatterns: [{ speaker: null, category: 'grammar|vocabulary|fluency|coherence|interaction|register', pattern: '', frequency: 'single|repeated', impact: '', evidence: evidence() }],
       corrections: [{ speaker: '', category: 'grammar|vocabulary|naturalness|coherence|register', sourceType: 'learner_error|self_correction|transcription_uncertain', original: 'exact transcript quote', corrected: '', explanation: '', rule: '', recurrence: 'single|repeated', priority: 'high|medium|low', evidence: evidence() }],
       lessonProgress: {
-        successfulUse: [{ skill: '', whySuccessful: '', evidence: evidence() }],
-        selfCorrections: [{ observation: '', significance: '', evidence: evidence() }],
-        missedOpportunities: [{ opportunity: '', coachPrompt: '', evidence: evidence() }]
+        successfulUse: [{ speaker: null, skill: '', whySuccessful: '', evidence: evidence() }],
+        selfCorrections: [{ speaker: null, observation: '', significance: '', evidence: evidence() }],
+        missedOpportunities: [{ speaker: null, opportunity: '', coachPrompt: '', evidence: evidence() }]
       },
       teacherPlan: {
-        reinforce: [{ focus: '', reason: '', evidence: evidence() }],
-        nextLessonFocus: [{ focus: '', why: '', activities: [], successMetric: '', evidence: evidence() }],
-        homework: [{ task: '', durationMinutes: null, successMetric: '', basedOn: '', evidence: evidence() }]
+        reinforce: [{ speaker: null, focus: '', reason: '', evidence: evidence() }],
+        nextLessonFocus: [{ speaker: null, focus: '', why: '', activities: [], successMetric: '', evidence: evidence() }],
+        homework: [{ speaker: null, task: '', durationMinutes: null, successMetric: '', basedOn: '', evidence: evidence() }]
       }
     }),
     meeting: selected('meeting', {
@@ -537,7 +537,7 @@ function schemaForContract(template: any, path: string[] = []): Record<string, a
   return { type: 'string' };
 }
 
-export function buildAnalysisJsonSchema(modes: AnalysisMode[]): Record<string, any> {
+export function buildAnalysisJsonSchema(modes: AnalysisMode[], selectedSpeakers: string[] = []): Record<string, any> {
   const schema = schemaForContract(buildAnalysisOutputContract(modes));
   schema.properties.analysisModes = {
     type: 'array',
@@ -545,6 +545,22 @@ export function buildAnalysisJsonSchema(modes: AnalysisMode[]): Record<string, a
     minItems: modes.length,
     maxItems: modes.length
   };
+  if (modes.includes('language') && selectedSpeakers.length > 1) {
+    const attributedItemPaths = [
+      ['languagePatterns'],
+      ['lessonProgress', 'successfulUse'],
+      ['lessonProgress', 'selfCorrections'],
+      ['lessonProgress', 'missedOpportunities'],
+      ['teacherPlan', 'reinforce'],
+      ['teacherPlan', 'nextLessonFocus'],
+      ['teacherPlan', 'homework']
+    ];
+    for (const path of attributedItemPaths) {
+      let node = schema.properties.languageClass;
+      for (const segment of path) node = node.properties[segment];
+      node.items.properties.speaker = { type: 'string', enum: selectedSpeakers };
+    }
+  }
   return schema;
 }
 
@@ -575,6 +591,7 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
     language: `COMMUNICATION AND LANGUAGE LENS - analyze each selected speaker's language performance and suggest evidence-based improvement.
 - Do not assume a teacher-learner relationship. Use neutral speaker or participant language in every human-readable value unless the transcript or optional user context explicitly identifies an educational role.
 - Assess each selected speaker separately. CEFR and 0-10 scores may be null when the sample is insufficient.
+- Set speaker to the exact selected transcript label on every languagePatterns item and every lessonProgress or teacherPlan item that evaluates or coaches one participant. When multiple participants are selected, speaker is mandatory on all such new items; do not combine their observations. A null speaker is reserved for genuinely global or mixed legacy-compatible content when attribution is not required.
 - Evaluate grammar, vocabulary, fluency, coherence and interaction from text. Intelligibility or pronunciation must be null unless Voxa supplies trusted pronunciation assessments below.
 - When trusted pronunciation assessments exist, map provider scores from 0-100 to the 0-10 intelligibility score. Use exact transcript words from the assessed segment as evidence, name concrete weak words in the observation, and keep the provider measurement distinct from broader proficiency.
 - possibleFillers contains deterministic transcript matches, not provider scores. Treat them as hesitation clues only after checking their context; "like", "actually", and "you know" may carry ordinary lexical meaning and must not automatically be called fillers or errors.
@@ -973,6 +990,13 @@ export function sanitizeAnalysisResult(raw: any, transcriptText: string, request
   if (selectedKeys && languageClass) {
     languageClass.learnerProfiles = asSelectedSpeakerItems(languageClass.learnerProfiles, 'speaker', selectedKeys);
     languageClass.corrections = asSelectedSpeakerItems(languageClass.corrections, 'speaker', selectedKeys);
+    languageClass.languagePatterns = asOptionalSelectedSpeakerItems(languageClass.languagePatterns, selectedSpeakers || []);
+    for (const key of ['successfulUse', 'selfCorrections', 'missedOpportunities']) {
+      languageClass.lessonProgress[key] = asOptionalSelectedSpeakerItems(languageClass.lessonProgress[key], selectedSpeakers || []);
+    }
+    for (const key of ['reinforce', 'nextLessonFocus', 'homework']) {
+      languageClass.teacherPlan[key] = asOptionalSelectedSpeakerItems(languageClass.teacherPlan[key], selectedSpeakers || []);
+    }
   }
   if (selectedKeys && meeting) {
     meeting.participantViews = asSelectedSpeakerItems(meeting.participantViews, 'speaker', selectedKeys);
@@ -1021,6 +1045,18 @@ function asSelectedSpeakerItems(value: unknown, key: string, selectedKeys: Set<s
   return value.filter((item) => selectedKeys.has(String(item?.[key] || '').trim().toLocaleLowerCase()));
 }
 
+function asOptionalSelectedSpeakerItems(value: unknown, selectedSpeakers: string[]): any[] {
+  if (!Array.isArray(value)) return [];
+  const canonicalLabels = new Map(selectedSpeakers.map((speaker) => [speaker.toLocaleLowerCase(), speaker]));
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [item];
+    const suppliedSpeaker = typeof item.speaker === 'string' ? item.speaker.trim() : '';
+    if (!suppliedSpeaker) return [{ ...item, speaker: null }];
+    const canonicalSpeaker = canonicalLabels.get(suppliedSpeaker.toLocaleLowerCase());
+    return canonicalSpeaker ? [{ ...item, speaker: canonicalSpeaker }] : [];
+  });
+}
+
 export async function analyzeTranscriptWithOpenRouter(
   apiKey: string,
   transcriptText: string,
@@ -1028,15 +1064,16 @@ export async function analyzeTranscriptWithOpenRouter(
   options: AnalyzeOptions = {}
 ): Promise<AnalysisResult> {
   const modes = normalizeAnalysisModes(options.modes);
+  const selectedSpeakers = normalizeSelectedSpeakers(options.selectedSpeakers, transcriptText);
   const result = await completeJsonWithOpenRouter({
     apiKey,
     model,
     maxTokens: 20000,
-    responseSchema: buildAnalysisJsonSchema(modes),
+    responseSchema: buildAnalysisJsonSchema(modes, selectedSpeakers),
     reasoningEffort: DEFAULT_ANALYSIS_REASONING_EFFORT,
     systemPrompt: options.systemPrompt || process.env.VOXA_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT,
     userPrompt: buildAnalysisPrompt(transcriptText, { ...options, modes })
   });
-  result.data = sanitizeAnalysisResult(result.data, transcriptText, modes, options.selectedSpeakers);
+  result.data = sanitizeAnalysisResult(result.data, transcriptText, modes, selectedSpeakers);
   return result;
 }

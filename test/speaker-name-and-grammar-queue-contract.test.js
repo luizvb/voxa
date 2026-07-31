@@ -23,9 +23,13 @@ test('participant names persist owner-scoped in the current transcript across we
 
 test('pending participant names are saved before insights and grammar audio runs as one participant queue', () => {
   assert.match(historyView, /speakerNamesDirty \? await saveSpeakerNames\(\) : selectedSpeakers/);
+  assert.match(historyView, /saveSpeakerNames\(\)\.catch\(\(\) => undefined\)/);
+  assert.match(historyView, /setSpeakerNameStatus\(t\('history', 'speakerNamesSaved'\)\)[\s\S]*setTimeout\(\(\) => \{[\s\S]*setSpeakerNamesExpanded\(false\)/);
   assert.match(historyView, /nameSpeakersBeforeInsights/);
-  assert.match(historyView, /className="speaker-name-panel"/);
-  assert.match(analysisView, /activeCorrectionSpeaker/);
+  assert.match(historyView, /speaker-name-panel/);
+  assert.match(historyView, /hasGenericSpeakerNames/);
+  assert.match(analysisView, /language-participant-focus/);
+  assert.match(analysisView, /scopeLanguageItems/);
   assert.match(analysisView, /queuedGrammarCorrections/);
   assert.match(analysisView, /playGrammarQueueItem\(index \+ 1\)/);
   assert.match(analysisView, /playAllGrammar/);
