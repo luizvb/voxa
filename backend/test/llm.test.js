@@ -48,6 +48,7 @@ test('saved pronunciation evidence is available only to the language lens', () =
     fluencyScore: 82,
     completenessScore: 100,
     prosodyScore: 71,
+    possibleFillers: { totalCount: 2, matches: [{ expression: 'um', count: 1 }, { expression: 'actually', count: 1 }] },
     weakWords: [{ word: 'world', accuracyScore: 55, errorType: 'Mispronunciation' }],
   }];
   const languagePrompt = buildAnalysisPrompt('**Speaker 0** (00:00)\nHello world.', {
@@ -57,6 +58,8 @@ test('saved pronunciation evidence is available only to the language lens', () =
   assert.match(languagePrompt, /TRUSTED PRONUNCIATION ASSESSMENTS/);
   assert.match(languagePrompt, /assessment-1/);
   assert.match(languagePrompt, /Mispronunciation/);
+  assert.match(languagePrompt, /possibleFillers/);
+  assert.match(languagePrompt, /hesitation clues only after checking their context/);
   assert.match(languagePrompt, /map provider scores from 0-100 to the 0-10 intelligibility score/);
 
   const meetingPrompt = buildAnalysisPrompt('**Speaker 0** (00:00)\nHello world.', {

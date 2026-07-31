@@ -3,10 +3,27 @@ const test = require('node:test');
 
 const {
   assessEnglishPronunciation,
+  detectPossibleFillers,
   inspectPronunciationWav,
   parseAzurePronunciationResponse,
   pronunciationAudioHash,
 } = require('../dist/services/pronunciation');
+
+test('possible filler detection handles phrases, elongated spellings, and word boundaries', () => {
+  assert.deepEqual(detectPossibleFillers('Um, uhh... erm, hmmm. Like, you know, actually useful.'), {
+    totalCount: 7,
+    matches: [
+      { expression: 'um', count: 1 },
+      { expression: 'uh', count: 1 },
+      { expression: 'er', count: 1 },
+      { expression: 'hmm', count: 1 },
+      { expression: 'like', count: 1 },
+      { expression: 'you know', count: 1 },
+      { expression: 'actually', count: 1 },
+    ],
+  });
+  assert.equal(detectPossibleFillers('The summer theme is here.').totalCount, 0);
+});
 
 function pcmWav({ durationMs = 1000, channels = 1, sampleRate = 16000, bitsPerSample = 16 } = {}) {
   const bytesPerSample = bitsPerSample / 8;
@@ -64,10 +81,28 @@ test('Azure detailed response is normalized without inventing missing scores', (
     errorType: 'Mispronunciation',
     phonemes: [{ phoneme: 'h', accuracyScore: 48 }],
   });
+  assert.deepEqual(result.possibleFillers, { totalCount: 0, matches: [] });
   assert.equal(parseAzurePronunciationResponse({
     RecognitionStatus: 'Success',
     NBest: [{ Display: 'Hello.', PronunciationAssessment: { PronScore: null }, Words: [] }],
   }).overallScore, null);
+});
+
+test('Azure parser detects possible fillers from detailed word hypotheses', () => {
+  const result = parseAzurePronunciationResponse({
+    RecognitionStatus: 'Success',
+    NBest: [{
+      Display: 'I agree.',
+      Words: ['Um', 'I', 'actually', 'agree'].map((Word) => ({ Word, AccuracyScore: 90 })),
+    }],
+  });
+  assert.deepEqual(result.possibleFillers, {
+    totalCount: 2,
+    matches: [
+      { expression: 'um', count: 1 },
+      { expression: 'actually', count: 1 },
+    ],
+  });
 });
 
 test('Azure parser remains compatible with nested SDK-style assessment fields', () => {
@@ -100,9 +135,9 @@ test('Azure request sends the reference text and only the supplied WAV clip', as
   };
   try {
     const audio = pcmWav({ durationMs: 500 });
-    await assessEnglishPronunciation({
+    const result = await assessEnglishPronunciation({
       audio,
-      referenceText: 'Hello.',
+      referenceText: 'Um, hello.',
       apiKey: 'test-key',
       region: 'eastus',
     });
@@ -110,9 +145,13 @@ test('Azure request sends the reference text and only the supplied WAV clip', as
     assert.match(captured.url, /language=en-US/);
     assert.equal(captured.init.body.byteLength, audio.length);
     const configuration = JSON.parse(Buffer.from(captured.init.headers['Pronunciation-Assessment'], 'base64').toString('utf8'));
-    assert.equal(configuration.ReferenceText, 'Hello.');
+    assert.equal(configuration.ReferenceText, 'Um, hello.');
     assert.equal(configuration.EnableMiscue, true);
     assert.equal(configuration.EnableProsodyAssessment, true);
+    assert.deepEqual(result.possibleFillers, {
+      totalCount: 1,
+      matches: [{ expression: 'um', count: 1 }],
+    });
   } finally {
     global.fetch = originalFetch;
   }

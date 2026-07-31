@@ -98,6 +98,8 @@ type TranscriptDocumentProps = {
   pronunciationFluencyLabel: string;
   pronunciationCompletenessLabel: string;
   pronunciationProsodyLabel: string;
+  possibleFillersLabel: string;
+  possibleFillersHint: string;
   onPlaySegment: (key: string, startSeconds: number, endSeconds: number) => void;
   onDownloadSegment: (key: string, speaker: string, timestamp: string, startSeconds: number, endSeconds: number) => void;
   onAssessPronunciation: (segment: TranscriptSegment) => void;
@@ -166,6 +168,8 @@ function TranscriptDocument({
   pronunciationFluencyLabel,
   pronunciationCompletenessLabel,
   pronunciationProsodyLabel,
+  possibleFillersLabel,
+  possibleFillersHint,
   onPlaySegment,
   onDownloadSegment,
   onAssessPronunciation,
@@ -194,6 +198,7 @@ function TranscriptDocument({
             [pronunciationCompletenessLabel, assessment?.completenessScore],
             [pronunciationProsodyLabel, assessment?.prosodyScore],
           ].filter((metric): metric is [string, number] => typeof metric[1] === 'number');
+          const possibleFillers = assessment?.possibleFillers;
           return (
             <section className="transcript-block" key={segment.id}>
               <header>
@@ -221,6 +226,13 @@ function TranscriptDocument({
                   <div className="pronunciation-result">
                     <strong>{pronunciationScoreLabel} <span>{assessment.overallScore === null ? '-' : `${Math.round(assessment.overallScore)}/100`}</span></strong>
                     {metrics.length > 0 && <div>{metrics.map(([label, score]) => <span key={label}>{label} {Math.round(score)}</span>)}</div>}
+                    {!!possibleFillers?.totalCount && (
+                      <span className="pronunciation-fillers" title={possibleFillersHint}>
+                        <b>{possibleFillersLabel} {possibleFillers.totalCount}</b>
+                        {' · '}
+                        {possibleFillers.matches.map((match) => `${match.expression} ×${match.count}`).join(', ')}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1007,6 +1019,8 @@ export default function HistoryView({
                     pronunciationFluencyLabel={t('history', 'pronunciationFluency')}
                     pronunciationCompletenessLabel={t('history', 'pronunciationCompleteness')}
                     pronunciationProsodyLabel={t('history', 'pronunciationProsody')}
+                    possibleFillersLabel={t('history', 'possibleFillers')}
+                    possibleFillersHint={t('history', 'possibleFillersHint')}
                     onPlaySegment={(key, start, end) => void playTranscriptSegment(key, start, end)}
                     onDownloadSegment={(key, speaker, timestamp, start, end) => void downloadTranscriptSegment(key, speaker, timestamp, start, end)}
                     onAssessPronunciation={(segment) => void assessTranscriptSegment(segment)}

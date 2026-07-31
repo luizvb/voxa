@@ -661,6 +661,7 @@ export const analyzeRecording = async (req: Request, res: Response): Promise<voi
           fluencyScore: row.json_data?.fluencyScore ?? null,
           completenessScore: row.json_data?.completenessScore ?? null,
           prosodyScore: row.json_data?.prosodyScore ?? null,
+          possibleFillers: row.json_data?.possibleFillers ?? { totalCount: 0, matches: [] },
           weakWords: Array.isArray(row.json_data?.words)
             ? row.json_data.words
               .filter((word: any) => word?.errorType !== 'None' || (typeof word?.accuracyScore === 'number' && word.accuracyScore < 80))

@@ -18,6 +18,11 @@ export interface PronunciationWord {
   phonemes: Array<{ phoneme: string; accuracyScore: number | null }>;
 }
 
+export interface PossibleFillerSummary {
+  totalCount: number;
+  matches: Array<{ expression: string; count: number }>;
+}
+
 export interface PronunciationAssessmentResult {
   provider: 'azure';
   locale: 'en-US';
@@ -28,6 +33,7 @@ export interface PronunciationAssessmentResult {
   completenessScore: number | null;
   prosodyScore: number | null;
   words: PronunciationWord[];
+  possibleFillers: PossibleFillerSummary;
 }
 
 function boundedScore(value: unknown): number | null {
@@ -81,6 +87,37 @@ export function pronunciationAudioHash(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
+export function detectPossibleFillers(input: string | string[]): PossibleFillerSummary {
+  const tokens = (Array.isArray(input) ? input.join(' ') : input)
+    .toLocaleLowerCase('en-US')
+    .match(/[a-z]+(?:'[a-z]+)?/g) || [];
+  const counts = new Map<string, number>();
+  const add = (expression: string) => counts.set(expression, (counts.get(expression) || 0) + 1);
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index] === 'you' && tokens[index + 1] === 'know') {
+      add('you know');
+      index += 1;
+      continue;
+    }
+    const token = tokens[index];
+    if (/^u+h+$/.test(token)) add('uh');
+    else if (/^u+h?m+$/.test(token)) add('um');
+    else if (/^e+r+m*$/.test(token)) add('er');
+    else if (/^h+m+$/.test(token)) add('hmm');
+    else if (token === 'like') add('like');
+    else if (token === 'actually') add('actually');
+  }
+
+  const matches = ['um', 'uh', 'er', 'hmm', 'like', 'you know', 'actually']
+    .filter((expression) => counts.has(expression))
+    .map((expression) => ({ expression, count: counts.get(expression)! }));
+  return {
+    totalCount: matches.reduce((total, match) => total + match.count, 0),
+    matches,
+  };
+}
+
 export function parseAzurePronunciationResponse(body: any): PronunciationAssessmentResult {
   if (body?.RecognitionStatus !== 'Success') {
     const detail = body?.RecognitionStatus || body?.DisplayText || 'No speech was recognized.';
@@ -89,30 +126,33 @@ export function parseAzurePronunciationResponse(body: any): PronunciationAssessm
   const best = body?.NBest?.[0];
   if (!best) throw new Error('Microsoft Speech returned no pronunciation hypothesis.');
   const assessment = best.PronunciationAssessment || best;
+  const words: PronunciationWord[] = Array.isArray(best.Words) ? best.Words.map((word: any) => {
+    const wordAssessment = word?.PronunciationAssessment || word || {};
+    return {
+      word: String(word?.Word || '').trim(),
+      accuracyScore: boundedScore(wordAssessment.AccuracyScore),
+      errorType: String(wordAssessment.ErrorType || 'None'),
+      phonemes: Array.isArray(word?.Phonemes) ? word.Phonemes.map((phoneme: any) => {
+        const phonemeAssessment = phoneme?.PronunciationAssessment || phoneme || {};
+        return {
+          phoneme: String(phoneme?.Phoneme || '').trim(),
+          accuracyScore: boundedScore(phonemeAssessment.AccuracyScore),
+        };
+      }).filter((phoneme: any) => phoneme.phoneme) : [],
+    };
+  }).filter((word: PronunciationWord) => word.word) : [];
+  const recognizedText = String(best.Display || body.DisplayText || '').trim();
   return {
     provider: 'azure',
     locale: 'en-US',
-    recognizedText: String(best.Display || body.DisplayText || '').trim(),
+    recognizedText,
     overallScore: boundedScore(assessment.PronScore),
     accuracyScore: boundedScore(assessment.AccuracyScore),
     fluencyScore: boundedScore(assessment.FluencyScore),
     completenessScore: boundedScore(assessment.CompletenessScore),
     prosodyScore: boundedScore(assessment.ProsodyScore),
-    words: Array.isArray(best.Words) ? best.Words.map((word: any) => {
-      const wordAssessment = word?.PronunciationAssessment || word || {};
-      return {
-        word: String(word?.Word || '').trim(),
-        accuracyScore: boundedScore(wordAssessment.AccuracyScore),
-        errorType: String(wordAssessment.ErrorType || 'None'),
-        phonemes: Array.isArray(word?.Phonemes) ? word.Phonemes.map((phoneme: any) => {
-          const phonemeAssessment = phoneme?.PronunciationAssessment || phoneme || {};
-          return {
-            phoneme: String(phoneme?.Phoneme || '').trim(),
-            accuracyScore: boundedScore(phonemeAssessment.AccuracyScore),
-          };
-        }).filter((phoneme: any) => phoneme.phoneme) : [],
-      };
-    }).filter((word: PronunciationWord) => word.word) : [],
+    words,
+    possibleFillers: detectPossibleFillers(words.length ? words.map((word) => word.word) : recognizedText),
   };
 }
 
@@ -162,5 +202,8 @@ export async function assessEnglishPronunciation(input: {
   if (!response.ok) {
     throw new Error(`Microsoft Speech pronunciation assessment failed (${response.status}): ${body?.error?.message || response.statusText}`);
   }
-  return parseAzurePronunciationResponse(body);
+  return {
+    ...parseAzurePronunciationResponse(body),
+    possibleFillers: detectPossibleFillers(referenceText),
+  };
 }

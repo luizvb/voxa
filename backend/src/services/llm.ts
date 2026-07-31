@@ -77,6 +77,10 @@ export interface PronunciationEvidence {
   fluencyScore: number | null;
   completenessScore: number | null;
   prosodyScore: number | null;
+  possibleFillers: {
+    totalCount: number;
+    matches: Array<{ expression: string; count: number }>;
+  };
   weakWords: Array<{ word: string; accuracyScore: number | null; errorType: string }>;
 }
 
@@ -540,6 +544,7 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 - Assess each learner separately. CEFR and 0-10 scores may be null when the sample is insufficient.
 - Evaluate grammar, vocabulary, fluency, coherence and interaction from text. Intelligibility or pronunciation must be null unless Voxa supplies trusted pronunciation assessments below.
 - When trusted pronunciation assessments exist, map provider scores from 0-100 to the 0-10 intelligibility score. Use exact transcript words from the assessed segment as evidence, name concrete weak words in the observation, and keep the provider measurement distinct from broader proficiency.
+- possibleFillers contains deterministic transcript matches, not provider scores. Treat them as hesitation clues only after checking their context; "like", "actually", and "you know" may carry ordinary lexical meaning and must not automatically be called fillers or errors.
 - Capture successful target-language use, recurring error patterns, repair/self-correction, participation, comprehension signals and missed practice opportunities.
 - Separate grammar, lexical, discourse and hesitation repairs instead of merging them. Distinguish language performance from subject-matter knowledge or negotiation strategy.
 - Every correction must preserve an exact original transcript quote and set sourceType. Only sourceType=learner_error belongs in corrections. Put repaired speech in lessonProgress.selfCorrections and probable ASR corruption in evidenceQuality.transcriptionUncertainties.

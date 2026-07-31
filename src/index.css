@@ -423,6 +423,8 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .pronunciation-result > strong { color: var(--text-secondary); font-size: 11px; }
 .pronunciation-result > strong span { color: var(--text); font-size: 13px; }
 .pronunciation-result > div { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.pronunciation-fillers { flex-basis: 100%; color: var(--text-tertiary); }
+.pronunciation-fillers b { color: var(--text-secondary); font-weight: 650; }
 .transcript-divider { margin: 18px 0 6px; color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
 
 /* Analysis */

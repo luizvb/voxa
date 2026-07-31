@@ -37,6 +37,10 @@ export interface PronunciationAssessment {
     errorType: string;
     phonemes: Array<{ phoneme: string; accuracyScore: number | null }>;
   }>;
+  possibleFillers?: {
+    totalCount: number;
+    matches: Array<{ expression: string; count: number }>;
+  };
   createdAt: string;
 }
 

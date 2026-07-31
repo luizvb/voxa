@@ -66,6 +66,8 @@ test('English transcript segments expose saved pronunciation assessment controls
   assert.match(history, /transcriptData\.language === 'en-US'/);
   assert.match(history, /createPronunciationWavSegment/);
   assert.match(history, /platform\.assessPronunciation/);
+  assert.match(history, /possibleFillers\.matches/);
+  assert.match(history, /possibleFillersHint/);
   assert.match(routes, /requireVoxaPro, upload\.single\('audio'\), assessSegmentPronunciation/);
 });
 
