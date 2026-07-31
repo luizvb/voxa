@@ -2,10 +2,13 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  aggregateContinuousPronunciationResults,
+  alignPronunciationWords,
   assessEnglishPronunciation,
   detectPossibleFillers,
   inspectPronunciationWav,
   parseAzurePronunciationResponse,
+  pronunciationAssessmentModeForDuration,
   pronunciationAudioHash,
 } = require('../dist/services/pronunciation');
 
@@ -45,7 +48,7 @@ function pcmWav({ durationMs = 1000, channels = 1, sampleRate = 16000, bitsPerSa
   return buffer;
 }
 
-test('pronunciation WAV validation accepts only short mono 16 kHz PCM', () => {
+test('pronunciation WAV validation accepts mono 16 kHz PCM through exactly 120 seconds', () => {
   const audio = pcmWav({ durationMs: 1250 });
   const metadata = inspectPronunciationWav(audio);
   assert.equal(metadata.channels, 1);
@@ -53,7 +56,17 @@ test('pronunciation WAV validation accepts only short mono 16 kHz PCM', () => {
   assert.equal(Math.round(metadata.durationMs), 1250);
   assert.equal(pronunciationAudioHash(audio).length, 64);
   assert.throws(() => inspectPronunciationWav(pcmWav({ channels: 2 })), /mono, 16 kHz/);
-  assert.throws(() => inspectPronunciationWav(pcmWav({ durationMs: 30001 })), /0.1 and 30 seconds/);
+  assert.equal(Math.round(inspectPronunciationWav(pcmWav({ durationMs: 30000 })).durationMs), 30000);
+  const maximumAudio = pcmWav({ durationMs: 120000 });
+  assert.equal(Math.round(inspectPronunciationWav(maximumAudio).durationMs), 120000);
+  assert.ok(maximumAudio.length < 4 * 1024 * 1024);
+  assert.throws(() => inspectPronunciationWav(pcmWav({ durationMs: 120001 })), /0.1 and 120 seconds/);
+});
+
+test('assessment mode changes only above the 30 second boundary', () => {
+  assert.equal(pronunciationAssessmentModeForDuration(30000), 'single-shot');
+  assert.equal(pronunciationAssessmentModeForDuration(30000.01), 'continuous');
+  assert.equal(pronunciationAssessmentModeForDuration(120000), 'continuous');
 });
 
 test('Azure detailed response is normalized without inventing missing scores', () => {
@@ -67,6 +80,8 @@ test('Azure detailed response is normalized without inventing missing scores', (
       CompletenessScore: 100,
       Words: [{
         Word: 'Hello',
+        Offset: 1500000,
+        Duration: 2000000,
         AccuracyScore: 55,
         ErrorType: 'Mispronunciation',
         Phonemes: [{ Phoneme: 'h', AccuracyScore: 48 }],
@@ -79,13 +94,88 @@ test('Azure detailed response is normalized without inventing missing scores', (
     word: 'Hello',
     accuracyScore: 55,
     errorType: 'Mispronunciation',
+    offsetMs: 150,
+    durationMs: 200,
     phonemes: [{ phoneme: 'h', accuracyScore: 48 }],
   });
+  assert.equal(result.assessmentMode, 'single-shot');
   assert.deepEqual(result.possibleFillers, { totalCount: 0, matches: [] });
   assert.equal(parseAzurePronunciationResponse({
     RecognitionStatus: 'Success',
     NBest: [{ Display: 'Hello.', PronunciationAssessment: { PronScore: null }, Words: [] }],
   }).overallScore, null);
+});
+
+function assessedWord(word, offsetMs, accuracyScore = 90) {
+  return {
+    word,
+    accuracyScore,
+    errorType: 'None',
+    offsetMs,
+    durationMs: 100,
+    phonemes: [],
+  };
+}
+
+test('deterministic alignment handles repetitions, punctuation, omissions, and insertions', () => {
+  const aligned = alignPronunciationWords('Go, go home now.', [
+    assessedWord('go', 0),
+    assessedWord('home', 200),
+    assessedWord('quickly', 300),
+    assessedWord('now', 400),
+  ]);
+  assert.deepEqual(aligned.map((word) => [word.word, word.errorType]), [
+    ['Go', 'Omission'],
+    ['go', 'None'],
+    ['home', 'None'],
+    ['quickly', 'Insertion'],
+    ['now', 'None'],
+  ]);
+  assert.equal(aligned[0].offsetMs, null);
+  assert.equal(aligned[3].offsetMs, 300);
+});
+
+test('continuous results aggregate scores, offsets, and reference alignment', () => {
+  const result = aggregateContinuousPronunciationResults([
+    {
+      RecognitionStatus: 0,
+      NBest: [{
+        Display: 'Hello',
+        PronunciationAssessment: { FluencyScore: 80, ProsodyScore: 70 },
+        Words: [{
+          Word: 'Hello',
+          Offset: 1000000,
+          Duration: 4000000,
+          PronunciationAssessment: { AccuracyScore: 90, ErrorType: 'None' },
+        }],
+      }],
+    },
+    {
+      RecognitionStatus: 'Success',
+      NBest: [{
+        Display: 'world',
+        PronunciationAssessment: { FluencyScore: 84, ProsodyScore: 74 },
+        Words: [{
+          Word: 'world',
+          Offset: 6000000,
+          Duration: 3000000,
+          PronunciationAssessment: { AccuracyScore: 50, ErrorType: 'None' },
+        }],
+      }],
+    },
+  ], 'Hello brave world');
+
+  assert.equal(result.assessmentMode, 'continuous');
+  assert.equal(result.recognizedText, 'Hello world');
+  assert.deepEqual(result.words.map((word) => [word.word, word.errorType, word.offsetMs]), [
+    ['Hello', 'None', 100],
+    ['brave', 'Omission', null],
+    ['world', 'Mispronunciation', 600],
+  ]);
+  assert.equal(Math.round(result.accuracyScore), 47);
+  assert.equal(Math.round(result.completenessScore), 33);
+  assert.deepEqual(result.possibleFillers, { totalCount: 0, matches: [] });
+  assert.throws(() => aggregateContinuousPronunciationResults([], 'Hello'), /no pronunciation results/i);
 });
 
 test('Azure parser detects possible fillers from detailed word hypotheses', () => {
@@ -170,5 +260,64 @@ test('Azure request rejects unsafe endpoints and invalid reference text before s
     referenceText: ' ',
     apiKey: 'test-key',
     region: 'eastus',
-  }), /between 1 and 2,000 characters/);
+  }), /between 1 and 5,000 characters/);
+});
+
+test('reference text accepts exactly 5,000 characters and rejects anything longer', async () => {
+  const originalFetch = global.fetch;
+  let requests = 0;
+  global.fetch = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({
+      RecognitionStatus: 'Success',
+      NBest: [{ Display: 'x', PronunciationAssessment: { PronScore: 90 }, Words: [] }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const audio = pcmWav({ durationMs: 500 });
+    await assessEnglishPronunciation({
+      audio,
+      referenceText: 'x'.repeat(5000),
+      apiKey: 'test-key',
+      region: 'eastus',
+    });
+    await assert.rejects(() => assessEnglishPronunciation({
+      audio,
+      referenceText: 'x'.repeat(5001),
+      apiKey: 'test-key',
+      region: 'eastus',
+    }), /between 1 and 5,000 characters/);
+    assert.equal(requests, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('single-shot provider failures and timeouts are returned without partial results', async () => {
+  const originalFetch = global.fetch;
+  const audio = pcmWav({ durationMs: 500 });
+  try {
+    global.fetch = async () => new Response(
+      JSON.stringify({ error: { message: 'temporary provider failure' } }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
+    await assert.rejects(() => assessEnglishPronunciation({
+      audio,
+      referenceText: 'Hello.',
+      apiKey: 'test-key',
+      region: 'eastus',
+    }), /503/);
+
+    global.fetch = async () => {
+      throw new DOMException('The operation timed out.', 'TimeoutError');
+    };
+    await assert.rejects(() => assessEnglishPronunciation({
+      audio,
+      referenceText: 'Hello.',
+      apiKey: 'test-key',
+      region: 'eastus',
+    }), /timed out/i);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

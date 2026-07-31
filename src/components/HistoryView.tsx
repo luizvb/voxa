@@ -25,8 +25,10 @@ import type { LibraryStatus } from '../App';
 import { platform, type AnalysisSummary, type PronunciationAssessment, type Recording, type TranscriptSegment, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
 import { createPronunciationWavSegment, createWavSegment, findTranscriptSegmentEnd, parseTranscriptTimestamp, safeAudioSegmentName } from '../lib/audio-segment';
+import { getPronunciationWordLevel, getPronunciationWordPlaybackBounds } from '../lib/pronunciation-word';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 import AIAnalysis from './AIAnalysis';
+import PronunciationWordPopover, { type PronunciationWordPopoverLabels } from './PronunciationWordPopover';
 
 interface HistoryViewProps {
   recordings: Recording[];
@@ -98,9 +100,15 @@ type TranscriptDocumentProps = {
   pronunciationFluencyLabel: string;
   pronunciationCompletenessLabel: string;
   pronunciationProsodyLabel: string;
+  pronunciationLimitLabel: string;
   possibleFillersLabel: string;
   possibleFillersHint: string;
+  pronunciationWordLabels: PronunciationWordPopoverLabels;
+  correctPronunciationAvailable: boolean;
+  speakingPronunciationWordKey: string | null;
   onPlaySegment: (key: string, startSeconds: number, endSeconds: number) => void;
+  onPlayPronunciationWord: (key: string, startSeconds: number, endSeconds: number) => void;
+  onSpeakPronunciationWord: (key: string, word: string) => void;
   onDownloadSegment: (key: string, speaker: string, timestamp: string, startSeconds: number, endSeconds: number) => void;
   onAssessPronunciation: (segment: TranscriptSegment) => void;
 };
@@ -109,7 +117,31 @@ function normalizeSpokenWord(value: string): string {
   return value.toLocaleLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
 }
 
-function AssessedTranscriptText({ text, assessment }: { text: string; assessment?: PronunciationAssessment | null }) {
+function AssessedTranscriptText({
+  text,
+  segment,
+  assessment,
+  audioAvailable,
+  activeSegmentKey,
+  isPlaying,
+  correctPronunciationAvailable,
+  speakingPronunciationWordKey,
+  labels,
+  onPlayPronunciationWord,
+  onSpeakPronunciationWord,
+}: {
+  text: string;
+  segment: TranscriptSegment;
+  assessment?: PronunciationAssessment | null;
+  audioAvailable: boolean;
+  activeSegmentKey: string | null;
+  isPlaying: boolean;
+  correctPronunciationAvailable: boolean;
+  speakingPronunciationWordKey: string | null;
+  labels: PronunciationWordPopoverLabels;
+  onPlayPronunciationWord: (key: string, startSeconds: number, endSeconds: number) => void;
+  onSpeakPronunciationWord: (key: string, word: string) => void;
+}) {
   if (!assessment?.words?.length) return <>{text}</>;
   const tokens = text.split(/(\s+|[^\p{L}\p{N}'\u2019-]+)/gu).filter(Boolean);
   let assessmentIndex = 0;
@@ -125,24 +157,27 @@ function AssessedTranscriptText({ text, assessment }: { text: string; assessment
         matchedIndex += assessmentIndex;
         const word = assessment.words[matchedIndex];
         assessmentIndex = matchedIndex + 1;
-        const score = word.accuracyScore;
-        const severeError = ['Mispronunciation', 'Omission', 'Insertion'].includes(word.errorType);
-        const level = severeError || (score !== null && score < 60)
-          ? 'is-poor'
-          : word.errorType !== 'None' || (score !== null && score < 80)
-            ? 'is-needs-work'
-            : '';
+        const level = getPronunciationWordLevel(word);
         if (!level) return <span key={`${token}-${index}`}>{token}</span>;
-        const weakPhonemes = word.phonemes
-          .filter((phoneme) => phoneme.accuracyScore !== null && phoneme.accuracyScore < 80)
-          .map((phoneme) => `/${phoneme.phoneme}/ ${Math.round(phoneme.accuracyScore || 0)}`)
-          .join(', ');
-        const title = [
-          `${word.word}: ${score === null ? '-' : `${Math.round(score)}/100`}`,
-          word.errorType !== 'None' ? word.errorType : '',
-          weakPhonemes,
-        ].filter(Boolean).join(' · ');
-        return <mark key={`${token}-${index}`} className={`pronunciation-word ${level}`} title={title}>{token}</mark>;
+        const wordKey = `pronunciation:${segment.id}:${matchedIndex}`;
+        const playbackBounds = getPronunciationWordPlaybackBounds(segment, word);
+        return (
+          <PronunciationWordPopover
+            key={`${token}-${index}`}
+            token={token}
+            word={word}
+            level={level}
+            originalAvailable={audioAvailable && playbackBounds !== null}
+            originalPlaying={activeSegmentKey === wordKey && isPlaying}
+            correctAvailable={correctPronunciationAvailable}
+            correctPlaying={speakingPronunciationWordKey === wordKey}
+            labels={labels}
+            onPlayOriginal={() => {
+              if (playbackBounds) onPlayPronunciationWord(wordKey, playbackBounds.startSeconds, playbackBounds.endSeconds);
+            }}
+            onSpeakCorrect={() => onSpeakPronunciationWord(wordKey, word.word)}
+          />
+        );
       })}
     </>
   );
@@ -168,9 +203,15 @@ function TranscriptDocument({
   pronunciationFluencyLabel,
   pronunciationCompletenessLabel,
   pronunciationProsodyLabel,
+  pronunciationLimitLabel,
   possibleFillersLabel,
   possibleFillersHint,
+  pronunciationWordLabels,
+  correctPronunciationAvailable,
+  speakingPronunciationWordKey,
   onPlaySegment,
+  onPlayPronunciationWord,
+  onSpeakPronunciationWord,
   onDownloadSegment,
   onAssessPronunciation,
 }: TranscriptDocumentProps) {
@@ -183,13 +224,8 @@ function TranscriptDocument({
           const endSeconds = segment.endMs / 1000;
           const timestamp = formatDuration(segment.startMs);
           const hasAudioSegment = audioAvailable && endSeconds > startSeconds;
-          const coversWholeRecording = startSeconds <= 0.25
-            && durationSeconds > 0
-            && endSeconds >= durationSeconds - 0.5;
-          const canAssess = pronunciationEnabled
-            && hasAudioSegment
-            && endSeconds - startSeconds <= 30
-            && !coversWholeRecording;
+          const canOfferAssessment = pronunciationEnabled && hasAudioSegment;
+          const exceedsPronunciationLimit = endSeconds - startSeconds > 120;
           const segmentIsPlaying = activeSegmentKey === segment.id && isPlaying;
           const assessment = segment.assessment;
           const metrics = [
@@ -212,8 +248,16 @@ function TranscriptDocument({
                     <button type="button" className="transcript-segment-button" onClick={() => onDownloadSegment(segment.id, speaker, timestamp, startSeconds, endSeconds)} disabled={downloadingSegmentKey === segment.id} aria-label={downloadLabel} title={downloadLabel}>
                       {downloadingSegmentKey === segment.id ? <Loader2 className="spin" /> : <Download />}
                     </button>
-                    {canAssess && (
-                      <button type="button" className="transcript-segment-button" onClick={() => onAssessPronunciation(segment)} disabled={assessingSegmentId === segment.id} aria-label={pronunciationLabel} title={pronunciationLabel}>
+                    {canOfferAssessment && (
+                      <button
+                        type="button"
+                        className="transcript-segment-button"
+                        onClick={() => onAssessPronunciation(segment)}
+                        disabled={assessingSegmentId !== null || exceedsPronunciationLimit}
+                        aria-busy={assessingSegmentId === segment.id}
+                        aria-label={exceedsPronunciationLimit ? pronunciationLimitLabel : pronunciationLabel}
+                        title={exceedsPronunciationLimit ? pronunciationLimitLabel : pronunciationLabel}
+                      >
                         {assessingSegmentId === segment.id ? <Loader2 className="spin" /> : <AudioWaveform />}
                       </button>
                     )}
@@ -221,7 +265,21 @@ function TranscriptDocument({
                 )}
               </header>
               <div className="transcript-segment-content">
-                <p><AssessedTranscriptText text={segment.text} assessment={assessment} /></p>
+                <p>
+                  <AssessedTranscriptText
+                    text={segment.text}
+                    segment={segment}
+                    assessment={assessment}
+                    audioAvailable={audioAvailable}
+                    activeSegmentKey={activeSegmentKey}
+                    isPlaying={isPlaying}
+                    correctPronunciationAvailable={correctPronunciationAvailable}
+                    speakingPronunciationWordKey={speakingPronunciationWordKey}
+                    labels={pronunciationWordLabels}
+                    onPlayPronunciationWord={onPlayPronunciationWord}
+                    onSpeakPronunciationWord={onSpeakPronunciationWord}
+                  />
+                </p>
                 {assessment && (
                   <div className="pronunciation-result">
                     <strong>{pronunciationScoreLabel} <span>{assessment.overallScore === null ? '-' : `${Math.round(assessment.overallScore)}/100`}</span></strong>
@@ -346,6 +404,8 @@ export default function HistoryView({
   const [activeSegmentKey, setActiveSegmentKey] = useState<string | null>(null);
   const [downloadingSegmentKey, setDownloadingSegmentKey] = useState<string | null>(null);
   const [assessingSegmentId, setAssessingSegmentId] = useState<string | null>(null);
+  const [speakingPronunciationWordKey, setSpeakingPronunciationWordKey] = useState<string | null>(null);
+  const [pronunciationVoice, setPronunciationVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [isAutoProcessing, setIsAutoProcessing] = useState(false);
   const [autoProcessStep, setAutoProcessStep] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -359,6 +419,7 @@ export default function HistoryView({
   const segmentEndRef = useRef<number | null>(null);
   const decodedAudioRef = useRef<{ source: string; buffer: AudioBuffer } | null>(null);
   const autoProcessAttemptedRef = useRef<string | null>(null);
+  const pronunciationSpeechRequestRef = useRef(0);
 
   const selected = recordings.find((recording) => recording.id === selectedId);
   const sortedRecordings = useMemo(
@@ -372,6 +433,74 @@ export default function HistoryView({
   }, [query, sortedRecordings]);
 
   const locale = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US';
+
+  const stopPronunciationWordSpeech = () => {
+    pronunciationSpeechRequestRef.current += 1;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingPronunciationWordKey(null);
+  };
+
+  const speakPronunciationWord = (key: string, word: string) => {
+    if (
+      !pronunciationVoice
+      || typeof window === 'undefined'
+      || !('speechSynthesis' in window)
+      || typeof SpeechSynthesisUtterance === 'undefined'
+    ) return;
+    if (speakingPronunciationWordKey === key) {
+      stopPronunciationWordSpeech();
+      return;
+    }
+
+    audioRef.current?.pause();
+    window.speechSynthesis.cancel();
+    const requestId = pronunciationSpeechRequestRef.current + 1;
+    pronunciationSpeechRequestRef.current = requestId;
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.88;
+    utterance.voice = pronunciationVoice;
+    const finish = () => {
+      if (pronunciationSpeechRequestRef.current === requestId) {
+        setSpeakingPronunciationWordKey(null);
+      }
+    };
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    setSpeakingPronunciationWordKey(key);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return undefined;
+    const updateVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setPronunciationVoice(
+        voices.find((voice) => voice.lang.toLocaleLowerCase() === 'en-us')
+        || voices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('en-'))
+        || null,
+      );
+    };
+    updateVoice();
+    window.speechSynthesis.addEventListener('voiceschanged', updateVoice);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', updateVoice);
+  }, []);
+
+  useEffect(() => {
+    pronunciationSpeechRequestRef.current += 1;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setSpeakingPronunciationWordKey(null);
+    return () => {
+      pronunciationSpeechRequestRef.current += 1;
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     async function loadSelectedRecording() {
@@ -525,6 +654,7 @@ export default function HistoryView({
   const togglePlay = async () => {
     const audio = audioRef.current;
     if (!audio || !selected || isAudioLoading || !playbackSource) return;
+    stopPronunciationWordSpeech();
     if (!audio.paused) {
       audio.pause();
       return;
@@ -543,6 +673,7 @@ export default function HistoryView({
   const playTranscriptSegment = async (key: string, startSeconds: number, endSeconds: number) => {
     const audio = audioRef.current;
     if (!audio || isAudioLoading || !playbackSource) return;
+    stopPronunciationWordSpeech();
     if (activeSegmentKey === key && !audio.paused) {
       audio.pause();
       return;
@@ -613,12 +744,17 @@ export default function HistoryView({
 
   const assessTranscriptSegment = async (segment: TranscriptSegment) => {
     if (!selected || assessingSegmentId || transcriptData.language !== 'en-US') return;
-    if (localStorage.getItem('voxa_pronunciation_consent') !== 'accepted') {
+    if ((segment.endMs - segment.startMs) > 120_000) {
+      setAudioStatus(t('history', 'pronunciationLimit'));
+      return;
+    }
+    if (localStorage.getItem('voxa_pronunciation_consent_v2') !== 'accepted') {
       const accepted = window.confirm(t('history', 'pronunciationConsent'));
       if (!accepted) return;
-      localStorage.setItem('voxa_pronunciation_consent', 'accepted');
+      localStorage.setItem('voxa_pronunciation_consent_v2', 'accepted');
     }
     setAssessingSegmentId(segment.id);
+    setAudioStatus(t('history', 'assessingPronunciation'));
     try {
       const decoded = await getDecodedRecordingAudio();
       const clip = createPronunciationWavSegment(decoded, segment.startMs / 1000, segment.endMs / 1000);
@@ -1019,9 +1155,26 @@ export default function HistoryView({
                     pronunciationFluencyLabel={t('history', 'pronunciationFluency')}
                     pronunciationCompletenessLabel={t('history', 'pronunciationCompleteness')}
                     pronunciationProsodyLabel={t('history', 'pronunciationProsody')}
+                    pronunciationLimitLabel={t('history', 'pronunciationLimit')}
                     possibleFillersLabel={t('history', 'possibleFillers')}
                     possibleFillersHint={t('history', 'possibleFillersHint')}
+                    pronunciationWordLabels={{
+                      details: t('history', 'pronunciationWordDetails'),
+                      score: t('history', 'pronunciationWordScore'),
+                      error: t('history', 'pronunciationWordError'),
+                      weakPhonemes: t('history', 'weakPhonemes'),
+                      listenOriginal: t('history', 'listenOriginalWord'),
+                      pauseOriginal: t('history', 'pauseOriginalWord'),
+                      listenCorrect: t('history', 'listenCorrectWord'),
+                      stopCorrect: t('history', 'stopCorrectWord'),
+                      originalUnavailable: t('history', 'originalWordUnavailable'),
+                      correctUnavailable: t('history', 'correctWordUnavailable'),
+                    }}
+                    correctPronunciationAvailable={pronunciationVoice !== null}
+                    speakingPronunciationWordKey={speakingPronunciationWordKey}
                     onPlaySegment={(key, start, end) => void playTranscriptSegment(key, start, end)}
+                    onPlayPronunciationWord={(key, start, end) => void playTranscriptSegment(key, start, end)}
+                    onSpeakPronunciationWord={speakPronunciationWord}
                     onDownloadSegment={(key, speaker, timestamp, start, end) => void downloadTranscriptSegment(key, speaker, timestamp, start, end)}
                     onAssessPronunciation={(segment) => void assessTranscriptSegment(segment)}
                   />

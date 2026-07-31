@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import db from '../config/db';
 import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
 import { analyzeTranscriptWithOpenRouter, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
-import { assessEnglishPronunciation, inspectPronunciationWav, pronunciationAudioHash } from '../services/pronunciation';
+import { assessEnglishPronunciation, inspectPronunciationWav, pronunciationAssessmentModeForDuration, pronunciationAudioHash, type PronunciationAssessmentMode } from '../services/pronunciation';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
   await db.query(`
@@ -504,6 +504,9 @@ export const getRecordingStatus = async (req: Request, res: Response): Promise<v
 };
 
 export const assessSegmentPronunciation = async (req: Request, res: Response): Promise<void> => {
+  const startedAt = Date.now();
+  let assessmentMode: PronunciationAssessmentMode | null = null;
+  let assessedDurationMs: number | null = null;
   try {
     if (!req.file?.buffer?.length) {
       res.status(400).json({ error: 'A pronunciation clip is required.' });
@@ -536,20 +539,13 @@ export const assessSegmentPronunciation = async (req: Request, res: Response): P
       return;
     }
     const expectedDurationMs = Number(segment.end_ms) - Number(segment.start_ms);
-    if (expectedDurationMs <= 0 || expectedDurationMs > 30_000) {
+    if (expectedDurationMs <= 0 || expectedDurationMs > 120_000) {
       res.status(409).json({ error: 'This transcript segment is too long for pronunciation assessment.' });
       return;
     }
-    const recordingDurationMs = Number(segment.duration_ms);
-    const coversWholeRecording = Number(segment.start_ms) <= 250
-      && Number.isFinite(recordingDurationMs)
-      && recordingDurationMs > 0
-      && Number(segment.end_ms) >= recordingDurationMs - 500;
-    if (coversWholeRecording) {
-      res.status(409).json({ error: 'Pronunciation assessment requires a clip shorter than the complete recording.' });
-      return;
-    }
     const wav = inspectPronunciationWav(req.file.buffer);
+    assessedDurationMs = Math.round(wav.durationMs);
+    assessmentMode = pronunciationAssessmentModeForDuration(wav.durationMs);
     const durationToleranceMs = Math.max(750, expectedDurationMs * 0.12);
     if (Math.abs(wav.durationMs - expectedDurationMs) > durationToleranceMs) {
       res.status(400).json({ error: 'The uploaded clip duration does not match this transcript segment.' });
@@ -582,13 +578,26 @@ export const assessSegmentPronunciation = async (req: Request, res: Response): P
     } finally {
       client.release();
     }
+    console.info('Pronunciation assessment completed.', {
+      mode: assessment.assessmentMode,
+      durationMs: Math.round(wav.durationMs),
+      latencyMs: Date.now() - startedAt,
+      wordCount: assessment.words.length,
+      status: 'success',
+    });
     res.status(201).json({
       id: saved[0].id,
       ...assessment,
       createdAt: saved[0].created_at
     });
   } catch (error: any) {
-    console.error('Error assessing pronunciation:', error);
+    console.error('Pronunciation assessment failed.', {
+      mode: assessmentMode,
+      durationMs: assessedDurationMs,
+      latencyMs: Date.now() - startedAt,
+      wordCount: 0,
+      status: 'error',
+    });
     const isInputError = error instanceof RangeError;
     res.status(isInputError ? 400 : 502).json({ error: error.message || 'Pronunciation assessment failed.' });
   }

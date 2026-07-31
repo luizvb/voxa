@@ -25,6 +25,7 @@ export interface PronunciationAssessment {
   id: string;
   provider: 'azure';
   locale: 'en-US';
+  assessmentMode?: 'single-shot' | 'continuous';
   recognizedText: string;
   overallScore: number | null;
   accuracyScore: number | null;
@@ -35,6 +36,8 @@ export interface PronunciationAssessment {
     word: string;
     accuracyScore: number | null;
     errorType: string;
+    offsetMs?: number | null;
+    durationMs?: number | null;
     phonemes: Array<{ phoneme: string; accuracyScore: number | null }>;
   }>;
   possibleFillers?: {

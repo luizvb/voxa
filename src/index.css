@@ -412,13 +412,31 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
 .transcript-segment-actions { display: flex; gap: 5px; margin-top: 5px; }
 .transcript-segment-button { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: #ffffff; color: var(--text-secondary); cursor: pointer; }
 .transcript-segment-button:hover { border-color: var(--line-strong); background: var(--surface); color: var(--text); }
-.transcript-segment-button:disabled { cursor: wait; opacity: .55; }
+.transcript-segment-button:disabled { cursor: not-allowed; opacity: .55; }
 .transcript-segment-button svg { width: 13px; height: 13px; }
 .transcript-block p { margin: 0; color: #343432; font-size: 14px; line-height: 1.72; overflow-wrap: anywhere; }
 .transcript-segment-content { min-width: 0; }
-.pronunciation-word { border-radius: 3px; padding: 1px 2px; color: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pronunciation-word { display: inline; margin: 0; border: 0; border-radius: 3px; padding: 1px 2px; color: inherit; font: inherit; line-height: inherit; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; cursor: pointer; }
 .pronunciation-word.is-needs-work { background: #fff3bf; text-decoration-color: #d59b00; }
 .pronunciation-word.is-poor { background: #fee2e2; text-decoration-color: #c33b32; }
+.pronunciation-word:hover { filter: saturate(1.12); }
+.pronunciation-word:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.pronunciation-word-popover { z-index: 1000; display: grid; width: min(310px, calc(100vw - 24px)); gap: 10px; border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px; background: #ffffff; box-shadow: 0 14px 40px rgb(25 25 23 / 18%); color: var(--text); }
+.pronunciation-word-popover:focus { outline: none; }
+.pronunciation-word-popover-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pronunciation-word-popover-heading strong { font-size: 16px; }
+.pronunciation-word-score { flex: none; border-radius: 999px; padding: 3px 8px; color: #563d00; background: #fff3bf; font-size: 11px; font-weight: 750; }
+.pronunciation-word-score.is-poor { color: #8d201a; background: #fee2e2; }
+.pronunciation-word-popover p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.pronunciation-word-popover p b { color: var(--text); }
+.pronunciation-word-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pronunciation-word-actions button { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--surface); color: var(--text); font-size: 10px; font-weight: 650; line-height: 1.25; cursor: pointer; }
+.pronunciation-word-actions button:hover:not(:disabled) { border-color: var(--line-strong); background: #ffffff; }
+.pronunciation-word-actions button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.pronunciation-word-actions button:disabled { color: var(--text-tertiary); cursor: not-allowed; opacity: .65; }
+.pronunciation-word-actions button svg { flex: none; width: 15px; height: 15px; }
+.pronunciation-word-popover small { color: var(--text-tertiary); font-size: 9px; line-height: 1.35; }
+.pronunciation-word-popover-arrow { fill: #ffffff; stroke: var(--line-strong); stroke-width: 1px; }
 .pronunciation-result { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; color: var(--text-tertiary); font-size: 10px; }
 .pronunciation-result > strong { color: var(--text-secondary); font-size: 11px; }
 .pronunciation-result > strong span { color: var(--text); font-size: 13px; }
@@ -1148,6 +1166,7 @@ svg { width: 18px; height: 18px; stroke-width: 1.8; flex: 0 0 auto; }
   .recorder-main { padding: 18px; }
   .recording-title-field input { font-size: 22px; }
   .transcription-language-field { grid-template-columns: 1fr; gap: 6px; }
+  .pronunciation-word-actions { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -412,7 +412,7 @@ ipcMain.handle('pronunciation:assess', async (_event, input) => {
     `/api/recordings/${encodeURIComponent(input.recordingId)}/transcript/segments/${encodeURIComponent(input.segmentId)}/pronunciation`,
     {
       method: 'POST',
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(210_000),
       headers: { Authorization: `Bearer ${input.authToken || ''}` },
       body: form
     }
