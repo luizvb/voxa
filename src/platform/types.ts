@@ -21,6 +21,11 @@ export interface TranscriptResult {
   segments?: TranscriptSegment[];
 }
 
+export interface RenameTranscriptSpeakersInput {
+  recordingId: string;
+  speakers: Record<string, string>;
+}
+
 export interface PronunciationAssessment {
   id: string;
   provider: 'azure';
@@ -130,6 +135,7 @@ export interface VoxaPlatform {
   deleteRecording(id: string): Promise<void>;
   transcribe(input: TranscriptionInput): Promise<TranscriptResult>;
   getTranscript(recordingId: string): Promise<TranscriptResult | null>;
+  renameTranscriptSpeakers(input: RenameTranscriptSpeakersInput): Promise<Pick<TranscriptResult, 'markdown' | 'speakers'>>;
   assessPronunciation(input: PronunciationAssessmentInput): Promise<PronunciationAssessment>;
   analyze(input: AnalysisInput): Promise<any>;
   listAnalyses(recordingId: string): Promise<AnalysisSummary[]>;

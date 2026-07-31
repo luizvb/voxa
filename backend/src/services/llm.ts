@@ -249,6 +249,41 @@ export function extractSpeakerLabels(transcriptText: string): string[] {
   return speakers;
 }
 
+export function renameTranscriptSpeakerLabels(transcriptText: string, speakerNames: Record<string, string>): string {
+  const replacements = new Map(
+    Object.entries(speakerNames).map(([currentName, nextName]) => [currentName.trim().toLocaleLowerCase(), nextName.trim()])
+  );
+  const replace = (speaker: string) => replacements.get(speaker.trim().toLocaleLowerCase()) || speaker;
+
+  return String(transcriptText || '').split(/\r?\n/).map((line) => {
+    const inlineBoldTurn = line.match(/^(\s*\*\*)([^*:\n]{1,80})(:\*\*\s*.*)$/);
+    if (inlineBoldTurn && !isStructuralTranscriptLabel(inlineBoldTurn[2])) {
+      return `${inlineBoldTurn[1]}${replace(inlineBoldTurn[2])}${inlineBoldTurn[3]}`;
+    }
+
+    const markdownHeading = line.match(/^(\s*\*\*)([^*\n]{1,80})(\*\*(?:\s*\([^)]*\))?\s*)$/);
+    if (markdownHeading && !isStructuralTranscriptLabel(markdownHeading[2])) {
+      return `${markdownHeading[1]}${replace(markdownHeading[2])}${markdownHeading[3]}`;
+    }
+
+    const timestampedTurn = line.match(/^(\s*\[\d{1,2}:\d{2}(?::\d{2})?\]\s+)([^:\n]{1,80})(\s*:\s*.*)$/);
+    if (timestampedTurn && !isStructuralTranscriptLabel(timestampedTurn[2])) {
+      return `${timestampedTurn[1]}${replace(timestampedTurn[2])}${timestampedTurn[3]}`;
+    }
+
+    const labelledTurn = line.match(/^(\s*(?:\[\s*)?)([^:\]\n]{1,80})((?:\s*\])?\s*:\s*.*)$/);
+    if (
+      labelledTurn
+      && !/^\d{1,2}:\d{2}(?::\d{2})?$/.test(labelledTurn[2].trim())
+      && !isStructuralTranscriptLabel(labelledTurn[2])
+    ) {
+      return `${labelledTurn[1]}${replace(labelledTurn[2])}${labelledTurn[3]}`;
+    }
+
+    return line;
+  }).join('\n');
+}
+
 export interface TranscriptTurn {
   id: string;
   speaker: string;
@@ -537,9 +572,9 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 - evidenceSignal summarizes the strength of observed role-relevant evidence; it is never an autonomous hiring recommendation. decisionReadiness must be insufficient when role criteria or material evidence are missing.
 - Make the central trade-off explicit: what the transcript supports, what it does not support, and which missing proof could materially change a human review.
 - Preparation questions and practice items are part of interview coaching, not another analysis mode. Tie each recommendation to an observed gap, but do not present the recommendation as a transcript fact.`,
-    language: `LANGUAGE LESSON LENS - think like a skilled language teacher planning the learner's next lesson.
-- Identify learner and teacher by conversational function only when supported; otherwise use unknown.
-- Assess each learner separately. CEFR and 0-10 scores may be null when the sample is insufficient.
+    language: `COMMUNICATION AND LANGUAGE LENS - analyze each selected speaker's language performance and suggest evidence-based improvement.
+- Do not assume a teacher-learner relationship. Use neutral speaker or participant language in every human-readable value unless the transcript or optional user context explicitly identifies an educational role.
+- Assess each selected speaker separately. CEFR and 0-10 scores may be null when the sample is insufficient.
 - Evaluate grammar, vocabulary, fluency, coherence and interaction from text. Intelligibility or pronunciation must be null unless Voxa supplies trusted pronunciation assessments below.
 - When trusted pronunciation assessments exist, map provider scores from 0-100 to the 0-10 intelligibility score. Use exact transcript words from the assessed segment as evidence, name concrete weak words in the observation, and keep the provider measurement distinct from broader proficiency.
 - possibleFillers contains deterministic transcript matches, not provider scores. Treat them as hesitation clues only after checking their context; "like", "actually", and "you know" may carry ordinary lexical meaning and must not automatically be called fillers or errors.
@@ -548,8 +583,9 @@ export function buildAnalysisPrompt(transcriptText: string, options: AnalyzeOpti
 - Every correction must preserve an exact original transcript quote and set sourceType. Only sourceType=learner_error belongs in corrections. Put repaired speech in lessonProgress.selfCorrections and probable ASR corruption in evidenceQuality.transcriptionUncertainties.
 - Explicit repairs such as "full psych … full stack" are self-corrections: evaluate the repaired wording and do not list the abandoned fragment as an error.
 - Recover technical terms cautiously from context. For example, "styles company" in a React/CSS discussion may be a transcription of "Styled Components"; record that as a transcription uncertainty and never as a vocabulary failure.
-- Diagnose each priority at pattern level: what the learner does, why it affects communication and which exact instances demonstrate it. Avoid generic advice such as "use richer vocabulary" without examples.
-- Produce a practical teacher brief: what to reinforce, next lesson focus, activities, homework and measurable success checks. Every next-lesson focus must cite the observed language evidence it addresses.`,
+- Diagnose each priority at pattern level: what the speaker does, why it affects communication and which exact instances demonstrate it. Avoid generic advice such as "use richer vocabulary" without examples.
+- Use lessonContext, learnerProfiles and teacherPlan only as stable internal JSON property names. Their human-readable values must remain role-neutral unless an educational relationship is explicit.
+- Produce a practical improvement brief: points to consolidate, improvement focus, suggested practice and measurable success checks. Every teacherPlan.nextLessonFocus item must cite the observed language evidence it addresses.`,
     meeting: `MEETING LENS - think like the manager accountable for execution after the meeting.
 - Separate confirmed decisions, proposals and unresolved questions. Never convert a suggestion into a decision.
 - Action items require explicit commitment evidence. Owner and dueDate must be null unless that same evidence explicitly assigns them.
@@ -592,10 +628,10 @@ STRUCTURE AND DEPTH RULES
 - Populate every applicable section with specific detail. Empty arrays are correct when evidence is absent; generic filler is not.
 - Each item must answer what happened, why it matters and what should happen next when those fields exist.
 - Prefer 4-8 high-value items per mode-specific major array for substantive transcripts and up to 10 substantive question reviews. Use fewer when the source is short. Do not sacrifice evidence quality to fill a quota.
-- Keep summary.keyFindings to 2-4 items, summary.recommendedActions to at most 3 items, and summary.unansweredQuestions to at most 3 relevant items. Use fewer, including empty arrays, when the transcript does not support them.
-- summary.bottomLine must state the single most decision-relevant conclusion. keyFindings must explain significance and business impact. recommendedActions must name an expected outcome and cite the evidence that makes the action relevant.
-- Explicitly surface important missing information and unanswered questions that constrain confidence. Never hide uncertainty behind polished language.
-- Recommendations belong only in summary.recommendedActions, coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
+- Keep summary.keyFindings to 2-4 items. Return summary.recommendedActions and summary.unansweredQuestions as empty arrays; the detailed mode sections own recommendations and open questions.
+- summary.bottomLine must state the single most decision-relevant conclusion. keyFindings must explain significance and business impact.
+- Explicitly surface important missing information and unanswered questions in the applicable detailed mode section. Never hide uncertainty behind polished language.
+- Recommendations belong only in coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
 - Use null for unknown scalar values. Never replace missing structured fields with prose blobs.
 
 EXACT OUTPUT CONTRACT
@@ -948,8 +984,8 @@ export function sanitizeAnalysisResult(raw: any, transcriptText: string, request
     purpose: sanitized.summary?.purpose || { statement: '', evidence: [] },
     bottomLine: sanitized.summary?.bottomLine || { statement: '', confidence: 'low', evidence: [] },
     keyFindings: keepGrounded(sanitized.summary?.keyFindings, stats).slice(0, 4),
-    recommendedActions: keepGrounded(sanitized.summary?.recommendedActions, stats).slice(0, 3),
-    unansweredQuestions: keepGrounded(sanitized.summary?.unansweredQuestions, stats).slice(0, 3),
+    recommendedActions: [],
+    unansweredQuestions: [],
     language: String(sanitized.summary?.language || '')
   };
   const evidenceQuality = sanitized.evidenceQuality && typeof sanitized.evidenceQuality === 'object'

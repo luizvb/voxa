@@ -20,7 +20,7 @@ test('PDF report HTML includes every selected analysis mode', () => {
   });
 
   assert.match(html, /Interview analysis/);
-  assert.match(html, /Language lesson analysis/);
+  assert.match(html, /Communication and language analysis/);
   assert.match(html, /Meeting analysis/);
   assert.match(html, /Leadership interview/);
   assert.match(html, /@page\s*\{[\s\S]*size:\s*A4/);
@@ -64,8 +64,8 @@ test('PDF report normalizes and exports structured legacy insight fields', () =>
   assert.doesNotMatch(html, /A grounded executive brief/);
   assert.match(html, /Execution is credible/);
   assert.match(html, /The rollout has an accountable owner/);
-  assert.match(html, /Validate the revenue baseline/);
-  assert.match(html, /What is the baseline revenue/);
+  assert.doesNotMatch(html, /Validate the revenue baseline/);
+  assert.doesNotMatch(html, /What is the baseline revenue/);
   assert.match(html, /Revenue baseline was not stated/);
   assert.match(html, /Assess the conversation/);
   assert.doesNotMatch(html, /A grounded key point/);
@@ -73,7 +73,7 @@ test('PDF report normalizes and exports structured legacy insight fields', () =>
   assert.match(html, /Strong ownership, limited commercial evidence/);
   assert.match(html, /Decision readiness/);
   assert.match(html, /partial/);
-  assert.match(html, /Practice updates/);
+  assert.doesNotMatch(html, /Practice updates/);
   assert.match(html, /The learner communicates decisions clearly/);
   assert.match(html, /Use explicit business outcomes/);
   assert.match(html, /B2/);
@@ -81,6 +81,34 @@ test('PDF report normalizes and exports structured legacy insight fields', () =>
   assert.match(html, /Confirm the revenue baseline/);
   assert.match(html, /Speed versus evidence/);
   assert.match(html, /The operating model becomes reusable/);
+});
+
+test('PDF report uses neutral language labels in every supported locale', () => {
+  const analysis = {
+    analysisModes: ['language'],
+    summary: { title: 'Language review' },
+    languageClass: {
+      lessonContext: { objective: 'Hidden objective', learnerSpeakers: ['Alex'] },
+      learnerProfiles: [{ speaker: 'Alex', cefr: { level: 'B2' }, skills: {}, strengths: [], priorities: [] }],
+      corrections: [],
+      lessonProgress: {},
+      teacherPlan: { nextLessonFocus: [] }
+    }
+  };
+
+  const en = buildAnalysisReportHtml({ locale: 'en-US', recording: { name: 'Review' }, analysis });
+  const pt = buildAnalysisReportHtml({ locale: 'pt-BR', recording: { name: 'Revisão' }, analysis });
+  const es = buildAnalysisReportHtml({ locale: 'es-ES', recording: { name: 'Revisión' }, analysis });
+
+  assert.match(en, /Communication and language analysis/);
+  assert.match(en, /Speaker assessment/);
+  assert.match(pt, /Análise de comunicação e idioma/);
+  assert.match(pt, /Avaliação do speaker/);
+  assert.match(es, /Análisis de comunicación e idioma/);
+  assert.match(es, /Evaluación del hablante/);
+  assert.doesNotMatch(en, /Hidden objective/);
+  assert.doesNotMatch(pt, /Hidden objective/);
+  assert.doesNotMatch(es, /Hidden objective/);
 });
 
 test('PDF report prints reused evidence as references and the quote once in the catalog', () => {

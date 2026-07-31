@@ -12,6 +12,7 @@ test('v7 report is a progressive briefing with three destinations and closed det
   assert.match(component, /reportId}-summary/);
   assert.match(component, /reportId}-details/);
   assert.match(component, /reportId}-quality/);
+  assert.doesNotMatch(component, /next-steps-section/);
   assert.doesNotMatch(component, /open=\{index === 0\}/);
   assert.doesNotMatch(component, /focusReportTarget\(`citation-/);
   assert.match(component, /<details className="evidence-disclosure">/);
@@ -31,6 +32,27 @@ test('report labels use key findings in all supported languages', () => {
   assert.match(locales, /keyFindings: 'Principais conclusões'/);
   assert.match(locales, /keyFindings: 'Conclusiones principales'/);
   assert.doesNotMatch(locales, /Achados críticos|Critical findings|Hallazgos críticos/);
+});
+
+test('language report uses role-neutral labels and omits educational context metadata', () => {
+  const component = read('src/components/AIAnalysis.tsx');
+  const languageReport = component.slice(component.indexOf('function LanguageReport'), component.indexOf('function MeetingReport'));
+  const locales = read('src/i18n/locales.ts');
+  const browserPdf = read('src/lib/browser-pdf.ts');
+
+  assert.doesNotMatch(languageReport, /<ContextStrip/);
+  assert.match(locales, /learnerAssessment: 'Speaker assessment'/);
+  assert.match(locales, /learnerAssessment: 'Avaliação do speaker'/);
+  assert.match(locales, /learnerAssessment: 'Evaluación del hablante'/);
+  assert.match(locales, /lessonProgress: 'Observed progress'/);
+  assert.match(locales, /lessonProgress: 'Progresso encontrado'/);
+  assert.match(locales, /lessonProgress: 'Progreso observado'/);
+  assert.match(locales, /nextLessonPlan: 'Suggested improvement plan'/);
+  assert.match(locales, /nextLessonPlan: 'Plano sugerido de melhoria'/);
+  assert.match(locales, /nextLessonPlan: 'Plan de mejora sugerido'/);
+  assert.doesNotMatch(browserPdf, /renderNode\('recommendedActions'/);
+  assert.doesNotMatch(browserPdf, /renderNode\('unansweredQuestions'/);
+  assert.match(browserPdf, /\['learnerAssessment', \['learnerProfiles'\]\]/);
 });
 
 test('report controls retain focus and reduced-motion treatment at compact widths', () => {

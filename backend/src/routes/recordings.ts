@@ -11,6 +11,7 @@ import {
   getRecordingStatus,
   importTranscript,
   listAnalyses,
+  renameTranscriptSpeakers,
   streamRecording,
   listRecordings,
   transcribeRecording,
@@ -33,6 +34,7 @@ router.get('/:id/status', getRecordingStatus);
 router.get('/:id/media', streamRecording);
 router.post('/:id/analyze', requireVoxaPro, analyzeRecording);
 router.get('/:id/transcript', getTranscript);
+router.patch('/:id/transcript/speakers', renameTranscriptSpeakers);
 router.post('/:id/transcript/segments/:segmentId/pronunciation', requireVoxaPro, upload.single('audio'), assessSegmentPronunciation);
 router.get('/:id/analyses', listAnalyses);
 router.get('/:id/analyses/:analysisId', getAnalysisById);

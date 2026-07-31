@@ -1,6 +1,6 @@
 import { upload } from '@vercel/blob/client';
 import { getAuthCredentials, getAuthToken } from './auth-token';
-import type { AnalysisInput, AnalysisSummary, BillingStatus, PronunciationAssessment, PronunciationAssessmentInput, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptResult, TranscriptionInput, VoxaPlatform } from './types';
+import type { AnalysisInput, AnalysisSummary, BillingStatus, PronunciationAssessment, PronunciationAssessmentInput, Recording, RecordingMediaSource, RenameTranscriptSpeakersInput, SaveRecordingInput, TranscriptResult, TranscriptionInput, VoxaPlatform } from './types';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
@@ -81,6 +81,11 @@ export class WebPlatform implements VoxaPlatform {
     throw new Error('Transcription is taking longer than expected. Try again in a moment.');
   }
   getTranscript(id: string) { return request<TranscriptResult | null>(`/api/recordings/${encodeURIComponent(id)}/transcript`); }
+  renameTranscriptSpeakers(input: RenameTranscriptSpeakersInput) {
+    return request<Pick<TranscriptResult, 'markdown' | 'speakers'>>(`/api/recordings/${encodeURIComponent(input.recordingId)}/transcript/speakers`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ speakers: input.speakers }),
+    });
+  }
   async assessPronunciation(input: PronunciationAssessmentInput) {
     const form = new FormData();
     form.append('audio', new Blob([input.audio], { type: 'audio/wav' }), 'segment.wav');

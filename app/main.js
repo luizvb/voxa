@@ -405,6 +405,22 @@ ipcMain.handle('transcriptions:get', async (_event, input) => {
   return response.json();
 });
 
+ipcMain.handle('transcriptions:rename-speakers', async (_event, input) => {
+  const response = await fetchApi(`/api/recordings/${encodeURIComponent(input.recordingId)}/transcript/speakers`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${input.authToken || ''}`
+    },
+    body: JSON.stringify({ speakers: input.speakers })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Could not rename transcript speakers (${response.status}).`);
+  }
+  return response.json();
+});
+
 ipcMain.handle('pronunciation:assess', async (_event, input) => {
   const form = new FormData();
   form.append('audio', new Blob([input.audio], { type: 'audio/wav' }), 'segment.wav');

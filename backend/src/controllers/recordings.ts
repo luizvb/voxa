@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import db from '../config/db';
 import { normalizeTranscriptionLanguage, transcribeWithDeepgram, type TranscriptionLanguage } from '../services/transcription';
-import { analyzeTranscriptWithOpenRouter, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers } from '../services/llm';
+import { analyzeTranscriptWithOpenRouter, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, renameTranscriptSpeakerLabels } from '../services/llm';
 import { assessEnglishPronunciation, inspectPronunciationWav, pronunciationAssessmentModeForDuration, pronunciationAudioHash, type PronunciationAssessmentMode } from '../services/pronunciation';
 
 async function ensureUser(userId: string, email = 'unknown@voxa'): Promise<void> {
@@ -290,6 +290,85 @@ export const getTranscript = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error('Error loading transcript:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+};
+
+export const renameTranscriptSpeakers = async (req: Request, res: Response): Promise<void> => {
+  const requestedNames = req.body?.speakers;
+  if (!requestedNames || typeof requestedNames !== 'object' || Array.isArray(requestedNames)) {
+    res.status(400).json({ error: 'Speaker names must be provided as a name map.' });
+    return;
+  }
+
+  const entries = Object.entries(requestedNames as Record<string, unknown>)
+    .filter(([currentName, nextName]) => currentName.trim() && typeof nextName === 'string')
+    .map(([currentName, nextName]) => [currentName.trim(), String(nextName).replace(/\s+/g, ' ').trim()] as const);
+  if (!entries.length) {
+    res.status(400).json({ error: 'At least one speaker name is required.' });
+    return;
+  }
+  if (entries.some(([, nextName]) => !nextName || nextName.length > 80 || /[\n\r\[\]:*]/.test(nextName))) {
+    res.status(400).json({ error: 'Speaker names must contain 1-80 plain-text characters.' });
+    return;
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(`
+      SELECT t.id, t.markdown
+      FROM transcripts t
+      JOIN recordings r ON r.id = t.recording_id
+      WHERE t.recording_id = $1 AND r.user_id = $2
+      ORDER BY t.created_at DESC, t.id DESC
+      LIMIT 1
+      FOR UPDATE OF t
+    `, [req.params.id, req.user!.id]);
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'Transcript not found' });
+      return;
+    }
+
+    const transcript = rows[0];
+    const currentSpeakers = extractSpeakerLabels(transcript.markdown);
+    const currentByKey = new Map(currentSpeakers.map((speaker) => [speaker.toLocaleLowerCase(), speaker]));
+    const replacements = Object.fromEntries(
+      entries
+        .filter(([currentName]) => currentByKey.has(currentName.toLocaleLowerCase()))
+        .map(([currentName, nextName]) => [currentByKey.get(currentName.toLocaleLowerCase())!, nextName])
+    );
+    if (!Object.keys(replacements).length) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ error: 'No requested speaker was found in the current transcript.' });
+      return;
+    }
+
+    const finalNames = currentSpeakers.map((speaker) => replacements[speaker] || speaker);
+    if (new Set(finalNames.map((speaker) => speaker.toLocaleLowerCase())).size !== finalNames.length) {
+      await client.query('ROLLBACK');
+      res.status(409).json({ error: 'Each participant must have a unique name.' });
+      return;
+    }
+
+    const markdown = renameTranscriptSpeakerLabels(transcript.markdown, replacements);
+    await client.query('UPDATE transcripts SET markdown = $1 WHERE id = $2', [markdown, transcript.id]);
+
+    const replacementEntries = Object.entries(replacements);
+    const caseClauses = replacementEntries.map((_, index) => `WHEN lower(speaker) = lower($${index * 2 + 2}) THEN $${index * 2 + 3}`).join(' ');
+    await client.query(
+      `UPDATE transcript_segments SET speaker = CASE ${caseClauses} ELSE speaker END WHERE transcript_id = $1`,
+      [transcript.id, ...replacementEntries.flatMap(([currentName, nextName]) => [currentName, nextName])]
+    );
+    await client.query('COMMIT');
+
+    res.json({ markdown, speakers: extractSpeakerLabels(markdown) });
+  } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    console.error('Error renaming transcript speakers:', error);
+    res.status(500).json({ error: error.message || 'Could not rename transcript speakers.' });
+  } finally {
+    client.release();
   }
 };
 

@@ -17,8 +17,10 @@ import {
   Play,
   RefreshCw,
   Search,
+  Save,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
@@ -392,6 +394,9 @@ export default function HistoryView({
   const [analysisContext, setAnalysisContext] = useState('');
   const [detectedSpeakers, setDetectedSpeakers] = useState<string[]>([]);
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
+  const [speakerNameDrafts, setSpeakerNameDrafts] = useState<Record<string, string>>({});
+  const [speakerNameStatus, setSpeakerNameStatus] = useState('');
+  const [isSavingSpeakerNames, setIsSavingSpeakerNames] = useState(false);
   const [pdfStatus, setPdfStatus] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [activeTab, setActiveTab] = useState<'transcript' | 'analysis'>('transcript');
@@ -431,6 +436,10 @@ export default function HistoryView({
     if (!normalized) return sortedRecordings;
     return sortedRecordings.filter((recording) => recording.name.toLocaleLowerCase().includes(normalized));
   }, [query, sortedRecordings]);
+  const speakerNamesDirty = detectedSpeakers.some((speaker) => (speakerNameDrafts[speaker] || '').trim() !== speaker);
+  const normalizedSpeakerNames = detectedSpeakers.map((speaker) => (speakerNameDrafts[speaker] || '').replace(/\s+/g, ' ').trim());
+  const speakerNamesValid = normalizedSpeakerNames.every((speaker) => speaker.length > 0 && speaker.length <= 80 && !/[\n\r\[\]:*]/.test(speaker))
+    && new Set(normalizedSpeakerNames.map((speaker) => speaker.toLocaleLowerCase())).size === normalizedSpeakerNames.length;
 
   const locale = language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US';
 
@@ -517,6 +526,8 @@ export default function HistoryView({
       setPdfStatus('');
       setDetectedSpeakers([]);
       setSelectedSpeakers([]);
+      setSpeakerNameDrafts({});
+      setSpeakerNameStatus('');
 
       if (!selected.transcript) {
         setTranscriptData({ isTranscribing: false, status: t('history', 'noTranscript') });
@@ -536,6 +547,7 @@ export default function HistoryView({
         const speakers = result?.speakers || [];
         setDetectedSpeakers(speakers);
         setSelectedSpeakers(speakers);
+        setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
 
         try {
           const history = await platform.listAnalyses(selected.id);
@@ -623,7 +635,17 @@ export default function HistoryView({
       try {
         const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
         setTranscriptData({ markdown: result.markdown, language: result.language, segments: result.segments, isTranscribing: false, status: t('history', 'transcriptSaved') });
+        const speakers = result.speakers || [];
+        setDetectedSpeakers(speakers);
+        setSelectedSpeakers(speakers);
+        setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
         await loadRecordings();
+
+        if (speakers.length) {
+          setSpeakerNameStatus(t('history', 'nameSpeakersBeforeInsights'));
+          setActiveTab('transcript');
+          return;
+        }
 
         setAutoProcessStep(t('history', 'analyzingStep'));
         const analysis = await platform.analyze({
@@ -781,9 +803,44 @@ export default function HistoryView({
     try {
       const result = await platform.transcribe({ recordingId: selected.id, language: transcriptionLanguage, maxQuality: false });
       setTranscriptData({ markdown: result.markdown, language: result.language, segments: result.segments, isTranscribing: false, status: t('history', 'transcriptSaved') });
+      const speakers = result.speakers || [];
+      setDetectedSpeakers(speakers);
+      setSelectedSpeakers(speakers);
+      setSpeakerNameDrafts(Object.fromEntries(speakers.map((speaker) => [speaker, speaker])));
+      setSpeakerNameStatus(speakers.length ? t('history', 'nameSpeakersBeforeInsights') : '');
       await loadRecordings();
     } catch (error: any) {
       setTranscriptData({ isTranscribing: false, status: error?.message || t('history', 'processingFailed'), error: true });
+    }
+  };
+
+  const saveSpeakerNames = async (): Promise<string[]> => {
+    if (!selected || !detectedSpeakers.length || !speakerNamesDirty) return selectedSpeakers;
+    if (!speakerNamesValid) throw new Error(t('history', 'speakerNamesInvalid'));
+
+    const speakers = Object.fromEntries(detectedSpeakers.map((speaker) => [speaker, (speakerNameDrafts[speaker] || '').replace(/\s+/g, ' ').trim()]));
+    setIsSavingSpeakerNames(true);
+    setSpeakerNameStatus(t('history', 'savingSpeakerNames'));
+    try {
+      const result = await platform.renameTranscriptSpeakers({ recordingId: selected.id, speakers });
+      const renamedSelectedSpeakers = selectedSpeakers.map((speaker) => speakers[speaker] || speaker);
+      const nextSpeakers = result.speakers || detectedSpeakers.map((speaker) => speakers[speaker] || speaker);
+      setTranscriptData((current) => ({
+        ...current,
+        markdown: result.markdown,
+        segments: current.segments?.map((segment) => ({ ...segment, speaker: speakers[segment.speaker] || segment.speaker })),
+      }));
+      setDetectedSpeakers(nextSpeakers);
+      setSelectedSpeakers(renamedSelectedSpeakers);
+      setSpeakerNameDrafts(Object.fromEntries(nextSpeakers.map((speaker) => [speaker, speaker])));
+      setSpeakerNameStatus(t('history', 'speakerNamesSaved'));
+      return renamedSelectedSpeakers;
+    } catch (error: unknown) {
+      setSpeakerNameStatus(error instanceof Error ? error.message : t('history', 'speakerNamesSaveFailed'));
+      setActiveTab('transcript');
+      throw error;
+    } finally {
+      setIsSavingSpeakerNames(false);
     }
   };
 
@@ -792,12 +849,13 @@ export default function HistoryView({
     setAiData({ isAnalyzing: true, status: t('history', 'analyzingStep') });
     setActiveTab('analysis');
     try {
+      const speakersForAnalysis = speakerNamesDirty ? await saveSpeakerNames() : selectedSpeakers;
       const analysis = await platform.analyze({
         recordingId: selected.id,
         modes: analysisModes,
         outputLanguage: locale,
         context: analysisContext,
-        selectedSpeakers: detectedSpeakers.length ? selectedSpeakers : undefined,
+        selectedSpeakers: detectedSpeakers.length ? speakersForAnalysis : undefined,
       });
       setAiData({ analysis, isAnalyzing: false });
       try {
@@ -1084,7 +1142,7 @@ export default function HistoryView({
               {aiData.analysis && <button type="button" className="button button-secondary" onClick={handleExportPdf} disabled={isExportingPdf}>
                 {isExportingPdf ? <Loader2 className="spin" /> : <Download />}{t('history', 'exportPdf')}
               </button>}
-              <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={aiData.isAnalyzing || (detectedSpeakers.length > 0 && selectedSpeakers.length === 0)} data-keyboard-primary="true">
+              <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={aiData.isAnalyzing || (detectedSpeakers.length > 0 && selectedSpeakers.length === 0) || (speakerNamesDirty && !speakerNamesValid)} data-keyboard-primary="true">
                 {aiData.isAnalyzing ? <Loader2 className="spin" /> : <Sparkles />}
                 {aiData.analysis ? t('history', 'reAnalyze') : t('history', 'generateAiReport')}
               </button>
@@ -1135,6 +1193,35 @@ export default function HistoryView({
                 {transcriptData.isTranscribing ? (
                   <div className="content-status"><Loader2 className="spin" /><strong>{t('history', 'transcribingStep')}</strong></div>
                 ) : transcriptData.markdown ? (
+                  <>
+                  {!!detectedSpeakers.length && (
+                    <section className="speaker-name-panel" aria-labelledby="speaker-name-title">
+                      <header>
+                        <div><Users aria-hidden="true" /><div><h3 id="speaker-name-title">{t('history', 'nameSpeakers')}</h3><p>{t('history', 'nameSpeakersDescription')}</p></div></div>
+                        <button type="button" className="button button-secondary" onClick={() => void saveSpeakerNames()} disabled={!speakerNamesDirty || !speakerNamesValid || isSavingSpeakerNames}>
+                          {isSavingSpeakerNames ? <Loader2 className="spin" /> : <Save />}{t('history', 'saveSpeakerNames')}
+                        </button>
+                      </header>
+                      <div className="speaker-name-grid">
+                        {detectedSpeakers.map((speaker) => (
+                          <label key={speaker}>
+                            <span>{speaker === 'Speaker 0' ? `${speaker} · ${t('history', 'you')}` : speaker}</span>
+                            <input
+                              value={speakerNameDrafts[speaker] || ''}
+                              maxLength={80}
+                              onChange={(event) => {
+                                setSpeakerNameDrafts((current) => ({ ...current, [speaker]: event.target.value }));
+                                setSpeakerNameStatus('');
+                              }}
+                              aria-label={`${t('history', 'participantName')} ${speaker}`}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      {!speakerNamesValid && <p className="config-error" role="alert">{t('history', 'speakerNamesInvalid')}</p>}
+                      {speakerNameStatus && <p className="speaker-name-status" role="status">{speakerNameStatus}</p>}
+                    </section>
+                  )}
                   <TranscriptDocument
                     markdown={transcriptData.markdown}
                     segments={transcriptData.segments}
@@ -1178,6 +1265,7 @@ export default function HistoryView({
                     onDownloadSegment={(key, speaker, timestamp, start, end) => void downloadTranscriptSegment(key, speaker, timestamp, start, end)}
                     onAssessPronunciation={(segment) => void assessTranscriptSegment(segment)}
                   />
+                  </>
                 ) : (
                   <div className={transcriptData.error ? 'content-status is-error' : 'content-status'}>
                     <FileText /><strong>{transcriptData.status || t('history', 'noTranscript')}</strong>
@@ -1205,7 +1293,7 @@ export default function HistoryView({
                   <div className={aiData.error ? 'content-status is-error' : 'content-status'}>
                     <Sparkles /><strong>{aiData.status || t('history', 'readyForAnalysis')}</strong>
                     <p>{transcriptData.markdown ? t('history', 'analysisEmptyDescription') : t('history', 'transcriptRequired')}</p>
-                    {transcriptData.markdown && <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={detectedSpeakers.length > 0 && selectedSpeakers.length === 0}>{t('history', 'generateAiReport')}</button>}
+                    {transcriptData.markdown && <button type="button" className="button button-secondary" onClick={handleAnalyze} disabled={(detectedSpeakers.length > 0 && selectedSpeakers.length === 0) || (speakerNamesDirty && !speakerNamesValid)}>{t('history', 'generateAiReport')}</button>}
                   </div>
                 )}
               </motion.div>

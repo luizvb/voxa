@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { ANALYSIS_CONTRACT_VERSION, DEFAULT_ANALYSIS_MODEL, buildAnalysisJsonSchema, buildAnalysisOutputContract, buildAnalysisPrompt, buildTranscriptStructure, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, parseTranscriptTurns, sanitizeAnalysisResult } = require('../dist/services/llm');
+const { ANALYSIS_CONTRACT_VERSION, DEFAULT_ANALYSIS_MODEL, buildAnalysisJsonSchema, buildAnalysisOutputContract, buildAnalysisPrompt, buildTranscriptStructure, configuredAnalysisModel, extractSpeakerLabels, normalizeAnalysisModes, normalizeAnalysisOutputLanguage, normalizeSelectedSpeakers, parseTranscriptTurns, renameTranscriptSpeakerLabels, sanitizeAnalysisResult } = require('../dist/services/llm');
 const { completeJsonWithOpenRouter } = require('../dist/services/llm');
 
 test('analysis modes are validated, deduplicated and default to language', () => {
@@ -90,6 +90,27 @@ test('speaker labels are extracted from Deepgram markdown and common pasted tran
   assert.deepEqual(normalizeSelectedSpeakers(['bruno', 'Speaker 0', 'missing'], transcript), ['Speaker 0', 'Bruno']);
 });
 
+test('speaker labels are renamed without changing timestamps, formatting or spoken text', () => {
+  const transcript = [
+    '**Speaker 0** (00:01)',
+    'Speaker 1 should stay inside spoken text.',
+    '**Speaker 1:** Hello.',
+    '[00:03] Speaker 0: Welcome.',
+    '[Speaker 1]: Thanks.',
+    'Decision: Keep Speaker 0 in this structural note.'
+  ].join('\n');
+  const renamed = renameTranscriptSpeakerLabels(transcript, { 'Speaker 0': 'Luiz', 'Speaker 1': 'Ana' });
+  assert.equal(renamed, [
+    '**Luiz** (00:01)',
+    'Speaker 1 should stay inside spoken text.',
+    '**Ana:** Hello.',
+    '[00:03] Luiz: Welcome.',
+    '[Ana]: Thanks.',
+    'Decision: Keep Speaker 0 in this structural note.'
+  ].join('\n'));
+  assert.deepEqual(extractSpeakerLabels(renamed), ['Luiz', 'Ana']);
+});
+
 test('multiline transcripts are assembled into complete turns and question-answer units', () => {
   const transcript = [
     '**Interviewer** (00:10)',
@@ -125,7 +146,7 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
 
   assert.match(prompt, /Selected modes: interview, language, meeting/);
   assert.match(prompt, /INTERVIEW LENS/);
-  assert.match(prompt, /LANGUAGE LESSON LENS/);
+  assert.match(prompt, /COMMUNICATION AND LANGUAGE LENS/);
   assert.match(prompt, /MEETING LENS/);
   assert.match(prompt, /strong\|mixed\|weak\|insufficient/);
   assert.match(prompt, /decisionReadiness/);
@@ -137,8 +158,8 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /participantViews/);
   assert.match(prompt, /STRUCTURE AND DEPTH RULES/);
   assert.match(prompt, /summary\.keyFindings to 2-4 items/);
-  assert.match(prompt, /summary\.recommendedActions to at most 3 items/);
-  assert.match(prompt, /summary\.unansweredQuestions to at most 3 relevant items/);
+  assert.match(prompt, /summary\.recommendedActions and summary\.unansweredQuestions as empty arrays/);
+  assert.match(prompt, /Do not assume a teacher-learner relationship/);
   assert.match(prompt, /exact consecutive transcript quote/);
   assert.match(prompt, /Principal Engineer role/);
   assert.match(prompt, /\*\*Speaker 0\*\* Hello/);
@@ -182,7 +203,7 @@ test('analysis JSON schema is strict, mode-specific and constrains scores', () =
 
 test('single analysis prompt excludes unselected instructions', () => {
   const prompt = buildAnalysisPrompt('Transcript', { modes: ['language'] });
-  assert.match(prompt, /LANGUAGE LESSON LENS/);
+  assert.match(prompt, /COMMUNICATION AND LANGUAGE LENS/);
   assert.doesNotMatch(prompt, /INTERVIEW LENS/);
   assert.doesNotMatch(prompt, /MEETING LENS/);
 });
@@ -270,7 +291,7 @@ test('sanitizer canonicalizes repeated quotes into one transparent citation cata
   assert.equal(sanitized.meeting.actionItems[0].evidence[0].citationId, 'E001');
 });
 
-test('v7 sanitizer caps the decision summary while allowing fewer grounded items', () => {
+test('v7 sanitizer caps key findings and removes redundant summary next steps', () => {
   const transcript = 'Ana: The launch checklist is ready.';
   const evidence = [{ speaker: 'Ana', quote: 'The launch checklist is ready' }];
   const sanitized = sanitizeAnalysisResult({
@@ -284,8 +305,8 @@ test('v7 sanitizer caps the decision summary while allowing fewer grounded items
   }, transcript, ['meeting']);
 
   assert.equal(sanitized.summary.keyFindings.length, 4);
-  assert.equal(sanitized.summary.recommendedActions.length, 3);
-  assert.equal(sanitized.summary.unansweredQuestions.length, 3);
+  assert.deepEqual(sanitized.summary.recommendedActions, []);
+  assert.deepEqual(sanitized.summary.unansweredQuestions, []);
 });
 
 test('self-repairs and probable ASR corruption cannot become vocabulary failures', () => {

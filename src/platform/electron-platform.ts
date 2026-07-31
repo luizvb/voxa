@@ -25,6 +25,7 @@ export class ElectronPlatform implements VoxaPlatform {
   }
   async transcribe(input: TranscriptionInput) { return window.recorder.transcribeWithDeepgram({ ...input, ...(await this.auth()) }); }
   async getTranscript(recordingId: string) { return window.recorder.getTranscript(recordingId, await this.auth()); }
+  async renameTranscriptSpeakers(input: import('./types').RenameTranscriptSpeakersInput) { return window.recorder.renameTranscriptSpeakers({ ...input, ...(await this.auth()) }); }
   async assessPronunciation(input: PronunciationAssessmentInput) { return window.recorder.assessPronunciation({ ...input, ...(await this.auth()) }); }
   async analyze(input: AnalysisInput) { return window.recorder.analyzeWithLLM({ ...input, ...(await this.auth()) }); }
   async listAnalyses(recordingId: string) { return window.recorder.listAnalyses(recordingId, await this.auth()); }
