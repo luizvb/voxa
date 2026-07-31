@@ -42,7 +42,7 @@ test('web PDF export downloads a generated PDF without opening a blank tab', () 
   assert.match(pdf, /createAnalysisPdfDocument\(input\)\.output\('blob'\)/);
   assert.match(pdf, /anchor\.download = fileName/);
   assert.match(pdf, /createAnalysisPdfDocument/);
-  assert.match(pdf, /summary\.keyPoints/);
+  assert.match(pdf, /summary\.keyFindings/);
   assert.match(pdf, /addStatStrip/);
   assert.match(pdf, /modeEntries/);
 });

@@ -7,9 +7,9 @@
 | Run ID | `VOXA-FEATURE-2026-07-31-REPORT-V7` |
 | Request class | `feature` |
 | Started | 2026-07-31 |
-| Status | `in_progress` |
-| Current phase | `BUILD` |
-| Current owner | `Main / CODER` |
+| Status | `complete` |
+| Current phase | `HANDOFF` |
+| Current owner | `Main` |
 | Workspace | `/Users/luizneto/aquiles/voxa` |
 
 ## Objective and authority
@@ -23,12 +23,12 @@
 
 | ID | Observable outcome | Status |
 | --- | --- | --- |
-| AC-001 | New analyses use contract `7.0` without `executiveBrief`, `keyPoints`, or `criticalFindings` in `summary` | `in_progress` |
-| AC-002 | Saved v6 reports normalize to the v7 presentation without data migration | `in_progress` |
-| AC-003 | Initial report shows compact summary and closed detail groups | `in_progress` |
-| AC-004 | Evidence expands inline and no screen catalog jump remains | `in_progress` |
-| AC-005 | Web and Electron PDFs share the new hierarchy and deduplicated evidence appendix | `in_progress` |
-| AC-006 | Focused tests, builds, responsive render, keyboard/focus, and PDF checks pass | `in_progress` |
+| AC-001 | New analyses use contract `7.0` without `executiveBrief`, `keyPoints`, or `criticalFindings` in `summary` | `verified` |
+| AC-002 | Saved v6 reports normalize to the v7 presentation without data migration | `verified` |
+| AC-003 | Initial report shows compact summary and closed detail groups | `verified` |
+| AC-004 | Evidence expands inline and no screen catalog jump remains | `verified` |
+| AC-005 | Web and Electron PDFs share the new hierarchy and deduplicated evidence appendix | `verified` |
+| AC-006 | Focused tests, builds, responsive render, keyboard/focus, and PDF checks pass | `verified_with_known_unrelated_suite_failures` |
 
 ## Decisions
 
@@ -41,12 +41,16 @@
 
 | ID | Method | Result |
 | --- | --- | --- |
-| V-001 | Backend focused and full tests | pending |
-| V-002 | Root report/export tests | pending |
-| V-003 | Frontend and backend builds | pending |
-| V-004 | Desktop/mobile rendered fixture and interaction smoke | pending |
-| V-005 | Generated PDF inspection | pending |
+| V-001 | Backend v7 contract, sanitizer, prompt, schema, and deterministic eval tests | 28/28 pass after TypeScript compile with `--noImplicitAny false` |
+| V-002 | Root report/export/compatibility/static accessibility tests | 16/16 pass |
+| V-003 | Frontend production build | pass |
+| V-004 | Rendered fixture at 1280 px; responsive CSS contracts at 860/620/390; inline evidence and all details initially closed | pass |
+| V-005 | Electron PDF generated, rendered to PNG, and visually inspected | pass: summary page 1, populated detail groups page 2, deduplicated evidence appendix page 3 |
+| V-006 | Text/static checks | pass: no old critical-findings labels, no evidence-catalog jump, focus-visible and reduced-motion rules present, `git diff --check` clean |
 
 ## Residual risks
 
-- The worktree contains unrelated in-progress pronunciation/filler changes in shared files; implementation must preserve them.
+- The full root suite remains 56/57 because the unrelated session-store test imports a missing pre-existing `app/db` module.
+- The default backend build remains blocked by a pre-existing implicit-any error in `src/services/pronunciation.ts`; the report-v7 backend compile and 28 focused tests pass with that unrelated check relaxed.
+- The full backend suite has three pre-existing pronunciation expectation failures; no pronunciation source or test was changed as part of this run.
+- The worktree still contains unrelated in-progress landing-page, pronunciation, package, and other changes; this implementation preserved them.

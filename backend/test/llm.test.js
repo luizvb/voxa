@@ -136,20 +136,24 @@ test('combined analysis prompt includes selected schemas and safety boundaries',
   assert.match(prompt, /languagePatterns/);
   assert.match(prompt, /participantViews/);
   assert.match(prompt, /STRUCTURE AND DEPTH RULES/);
+  assert.match(prompt, /summary\.keyFindings to 2-4 items/);
+  assert.match(prompt, /summary\.recommendedActions to at most 3 items/);
+  assert.match(prompt, /summary\.unansweredQuestions to at most 3 relevant items/);
   assert.match(prompt, /exact consecutive transcript quote/);
   assert.match(prompt, /Principal Engineer role/);
   assert.match(prompt, /\*\*Speaker 0\*\* Hello/);
 });
 
-test('v6 output contract adds a citation ledger and transcription uncertainty register', () => {
+test('v7 output contract keeps a compact summary and evidence ledger', () => {
   const contract = buildAnalysisOutputContract(['interview', 'meeting']);
-  assert.equal(ANALYSIS_CONTRACT_VERSION, '6.0');
+  assert.equal(ANALYSIS_CONTRACT_VERSION, '7.0');
   assert.deepEqual(Object.keys(contract), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
   assert.equal(contract.languageClass, null);
   assert.ok(contract.interview.context);
   assert.ok(contract.interview.executiveAssessment);
   assert.ok(contract.summary.bottomLine);
-  assert.ok(contract.summary.criticalFindings);
+  assert.deepEqual(Object.keys(contract.summary), ['title', 'purpose', 'bottomLine', 'keyFindings', 'recommendedActions', 'unansweredQuestions', 'language']);
+  assert.ok(contract.summary.keyFindings);
   assert.ok(contract.summary.recommendedActions);
   assert.ok(contract.evidenceQuality.citationSummary);
   assert.ok(contract.evidenceQuality.evidenceCatalog);
@@ -167,7 +171,7 @@ test('analysis JSON schema is strict, mode-specific and constrains scores', () =
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
   assert.deepEqual(schema.properties.interview, { type: 'null' });
-  assert.deepEqual(schema.properties.version.enum, ['6.0']);
+  assert.deepEqual(schema.properties.version.enum, ['7.0']);
   assert.deepEqual(schema.properties.analysisModes.items.enum, ['meeting']);
   assert.equal(schema.properties.analysisModes.minItems, 1);
   assert.equal(schema.properties.analysisModes.maxItems, 1);
@@ -206,8 +210,8 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
     summary: {
       title: 'Launch',
       purpose: { statement: 'Review the launch checklist.', evidence: [{ speaker: 'Ana', quote: 'I will send the launch checklist on Friday' }] },
-      executiveBrief: { statement: 'Ana committed to send the checklist.', evidence: [{ speaker: 'Ana', quote: 'I will send the launch checklist on Friday' }] },
-      keyPoints: [{ statement: 'Checklist delivery is scheduled.', category: 'fact', evidence: [{ speaker: 'Ana', quote: 'send the launch checklist on Friday' }] }]
+      bottomLine: { statement: 'Ana committed to send the checklist.', confidence: 'high', evidence: [{ speaker: 'Ana', quote: 'I will send the launch checklist on Friday' }] },
+      keyFindings: [{ finding: 'Checklist delivery is scheduled.', significance: 'The commitment is explicit.', businessImpact: 'Planning can proceed.', confidence: 'high', evidence: [{ speaker: 'Ana', quote: 'send the launch checklist on Friday' }] }]
     },
     evidenceQuality: { level: 'high', reasons: [], limitations: [] },
     languageClass: { overallScore: 12 },
@@ -223,7 +227,7 @@ test('analysis sanitizer enforces mode isolation, score ranges and exact evidenc
   }, transcript, ['meeting']);
 
   assert.deepEqual(Object.keys(sanitized), ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting']);
-  assert.equal(sanitized.version, '6.0');
+  assert.equal(sanitized.version, '7.0');
   assert.deepEqual(sanitized.analysisModes, ['meeting']);
   assert.equal(sanitized.interview, null);
   assert.equal(sanitized.languageClass, null);
@@ -242,7 +246,7 @@ test('sanitizer canonicalizes repeated quotes into one transparent citation cata
   const sanitized = sanitizeAnalysisResult({
     summary: {
       title: 'Launch',
-      criticalFindings: [
+      keyFindings: [
         { finding: 'Checklist commitment', significance: 'Execution is explicit.', businessImpact: 'Reduces ambiguity.', confidence: 'high', evidence: [quote, quote] },
         { finding: 'Friday timing', significance: 'Timing is explicit.', businessImpact: 'Supports planning.', confidence: 'high', evidence: [quote] }
       ]
@@ -260,10 +264,28 @@ test('sanitizer canonicalizes repeated quotes into one transparent citation cata
     repeatedReferences: 3,
     reuseRatio: 0.75
   });
-  assert.equal(sanitized.summary.criticalFindings[0].evidence.length, 1);
-  assert.equal(sanitized.summary.criticalFindings[0].evidence[0].citationId, 'E001');
-  assert.equal(sanitized.summary.criticalFindings[0].evidence[0].turnId, 'T001');
+  assert.equal(sanitized.summary.keyFindings[0].evidence.length, 1);
+  assert.equal(sanitized.summary.keyFindings[0].evidence[0].citationId, 'E001');
+  assert.equal(sanitized.summary.keyFindings[0].evidence[0].turnId, 'T001');
   assert.equal(sanitized.meeting.actionItems[0].evidence[0].citationId, 'E001');
+});
+
+test('v7 sanitizer caps the decision summary while allowing fewer grounded items', () => {
+  const transcript = 'Ana: The launch checklist is ready.';
+  const evidence = [{ speaker: 'Ana', quote: 'The launch checklist is ready' }];
+  const sanitized = sanitizeAnalysisResult({
+    summary: {
+      keyFindings: Array.from({ length: 6 }, (_, index) => ({ finding: `Finding ${index + 1}`, significance: 'Relevant.', businessImpact: 'Execution.', confidence: 'high', evidence })),
+      recommendedActions: Array.from({ length: 5 }, (_, index) => ({ action: `Action ${index + 1}`, priority: 'near_term', rationale: 'Relevant.', expectedOutcome: 'Progress.', evidence })),
+      unansweredQuestions: Array.from({ length: 5 }, (_, index) => ({ question: `Question ${index + 1}`, whyItMatters: 'It constrains execution.', evidence }))
+    },
+    evidenceQuality: { level: 'high', reasons: [], limitations: [], missingInformation: [], transcriptionUncertainties: [] },
+    meeting: {}
+  }, transcript, ['meeting']);
+
+  assert.equal(sanitized.summary.keyFindings.length, 4);
+  assert.equal(sanitized.summary.recommendedActions.length, 3);
+  assert.equal(sanitized.summary.unansweredQuestions.length, 3);
 });
 
 test('self-repairs and probable ASR corruption cannot become vocabulary failures', () => {
