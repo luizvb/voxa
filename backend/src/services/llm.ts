@@ -333,7 +333,7 @@ export function normalizeSelectedSpeakers(value: unknown, transcriptText: string
 
 const evidenceExample = { speaker: '', quote: 'exact consecutive transcript quote' };
 
-export const ANALYSIS_CONTRACT_VERSION = '6.0';
+export const ANALYSIS_CONTRACT_VERSION = '7.0';
 
 export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<string, any> {
   const selected = (mode: AnalysisMode, value: Record<string, any>) => modes.includes(mode) ? value : null;
@@ -345,10 +345,8 @@ export function buildAnalysisOutputContract(modes: AnalysisMode[]): Record<strin
     summary: {
       title: 'short factual title',
       purpose: { statement: 'explicit purpose or not determinable', evidence: evidence() },
-      executiveBrief: { statement: '3-5 sentence decision-ready synthesis', evidence: evidence() },
       bottomLine: { statement: 'single most important executive conclusion', confidence: 'high|medium|low', evidence: evidence() },
-      keyPoints: [{ statement: '', category: 'fact|decision|risk|learning|coaching', evidence: evidence() }],
-      criticalFindings: [{
+      keyFindings: [{
         finding: '', significance: '', businessImpact: '', confidence: 'high|medium|low', evidence: evidence()
       }],
       recommendedActions: [{
@@ -593,8 +591,9 @@ STRUCTURE AND DEPTH RULES
 - Use evidenceQuality.transcriptionUncertainties only for material speech-to-text ambiguity. Keep original verbatim, add the probable reading separately, state confidence, and set affectsAssessment=false whenever the uncertain fragment is excluded from scoring.
 - Populate every applicable section with specific detail. Empty arrays are correct when evidence is absent; generic filler is not.
 - Each item must answer what happened, why it matters and what should happen next when those fields exist.
-- Prefer 4-8 high-value items per major array for substantive transcripts and up to 10 substantive question reviews. Use fewer when the source is short. Do not sacrifice evidence quality to fill a quota.
-- summary.bottomLine must state the single most decision-relevant conclusion. criticalFindings must explain significance and business impact. recommendedActions must name an expected outcome and cite the evidence that makes the action relevant.
+- Prefer 4-8 high-value items per mode-specific major array for substantive transcripts and up to 10 substantive question reviews. Use fewer when the source is short. Do not sacrifice evidence quality to fill a quota.
+- Keep summary.keyFindings to 2-4 items, summary.recommendedActions to at most 3 items, and summary.unansweredQuestions to at most 3 relevant items. Use fewer, including empty arrays, when the transcript does not support them.
+- summary.bottomLine must state the single most decision-relevant conclusion. keyFindings must explain significance and business impact. recommendedActions must name an expected outcome and cite the evidence that makes the action relevant.
 - Explicitly surface important missing information and unanswered questions that constrain confidence. Never hide uncertainty behind polished language.
 - Recommendations belong only in summary.recommendedActions, coaching, teacherPlan or nextMeeting. Decisions and action items must remain transcript facts.
 - Use null for unknown scalar values. Never replace missing structured fields with prose blobs.
@@ -943,17 +942,14 @@ export function sanitizeAnalysisResult(raw: any, transcriptText: string, request
     meeting.participantViews = asSelectedSpeakerItems(meeting.participantViews, 'speaker', selectedKeys);
   }
   clearUngroundedFields(sanitized.summary?.purpose, ['statement'], stats);
-  clearUngroundedFields(sanitized.summary?.executiveBrief, ['statement'], stats);
   clearUngroundedFields(sanitized.summary?.bottomLine, ['statement'], stats);
   const summary = {
     title: String(sanitized.summary?.title || ''),
     purpose: sanitized.summary?.purpose || { statement: '', evidence: [] },
-    executiveBrief: sanitized.summary?.executiveBrief || { statement: '', evidence: [] },
     bottomLine: sanitized.summary?.bottomLine || { statement: '', confidence: 'low', evidence: [] },
-    keyPoints: keepGrounded(sanitized.summary?.keyPoints, stats),
-    criticalFindings: keepGrounded(sanitized.summary?.criticalFindings, stats),
-    recommendedActions: keepGrounded(sanitized.summary?.recommendedActions, stats),
-    unansweredQuestions: keepGrounded(sanitized.summary?.unansweredQuestions, stats),
+    keyFindings: keepGrounded(sanitized.summary?.keyFindings, stats).slice(0, 4),
+    recommendedActions: keepGrounded(sanitized.summary?.recommendedActions, stats).slice(0, 3),
+    unansweredQuestions: keepGrounded(sanitized.summary?.unansweredQuestions, stats).slice(0, 3),
     language: String(sanitized.summary?.language || '')
   };
   const evidenceQuality = sanitized.evidenceQuality && typeof sanitized.evidenceQuality === 'object'

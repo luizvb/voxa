@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { normalizeAnalysisReport } from './analysis-report';
 import type { Recording } from '../platform/types';
 
 type PdfInput = { analysis: unknown; recording: Recording; locale: string };
@@ -8,38 +9,41 @@ type AnalysisRecord = Record<string, unknown>;
 const COPY: Record<Language, Record<string, string>> = {
   en: {
     report: 'Verified conversation report', recorded: 'Recorded', generated: 'Generated', page: 'Page', of: 'of',
-    evidenceQuality: 'Evidence quality', analysisModes: 'Analysis lenses', keyPoints: 'Key points', version: 'Report version',
-    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive brief', transcriptEvidence: 'Transcript evidence', evidenceCatalog: 'Evidence catalog', transcriptionUncertainties: 'Transcription uncertainties', probableReading: 'Probable reading', bottomLine: 'Bottom line', criticalFindings: 'Critical findings', recommendedActions: 'Recommended actions', unansweredQuestions: 'Questions that constrain the decision', missingInformation: 'Missing information',
+    evidenceQuality: 'Evidence quality', analysisModes: 'Analysis lenses', keyFindings: 'Key findings', version: 'Report version',
+    purpose: 'Purpose', limitations: 'Evidence limitations', summary: 'Executive summary', nextSteps: 'Next steps', transcriptEvidence: 'Transcript evidence', evidenceCatalog: 'Evidence appendix', transcriptionUncertainties: 'Transcription uncertainties', probableReading: 'Probable reading', bottomLine: 'Bottom line', recommendedActions: 'AI recommendations', unansweredQuestions: 'Open questions', missingInformation: 'Missing information',
+    overallAssessment: 'Overall assessment', signalsAndCompetencies: 'Signals and competencies', evaluatedAnswers: 'Evaluated answers', preparationPlan: 'Preparation plan', learnerAssessment: 'Learner assessment', patternsAndCorrections: 'Patterns and corrections', progressGroup: 'Progress', nextLessonGroup: 'Next lesson', decisionsAndActions: 'Decisions and actions', risksAndPending: 'Risks and pending items', contextAndParticipants: 'Context and participants', metricsAndImplications: 'Metrics and implications',
     interview: 'Interview analysis', languageClass: 'Language lesson analysis', meeting: 'Meeting analysis', lens: 'Analysis lens',
     verify: 'AI-generated analysis should be checked against the transcript. Recommendations are guidance, not transcript facts.',
     context: 'Context', executiveAssessment: 'Executive assessment', overallScore: 'Overall score', scoreConfidence: 'Score confidence', outcomeForecast: 'Directional forecast', evidenceSignal: 'Strength of observed evidence', decisionReadiness: 'Decision readiness', keyTradeoff: 'Key trade-off', rationale: 'Rationale', caveat: 'Caveat',
     strengths: 'Strongest evidence', concerns: 'Material concerns', contradictions: 'Contradictions', competencies: 'Competencies', questionReviews: 'Question-by-question review', coaching: 'Coaching plan', priorities: 'Priorities', candidateQuestions: 'Candidate questions', practiceQuestions: 'Practice questions',
     lessonContext: 'Lesson context', objective: 'Objective', targetLanguage: 'Target language', learnerSpeakers: 'Learners', teacherSpeakers: 'Teachers', topics: 'Topics', learnerProfiles: 'Learner profiles', cefr: 'CEFR', skills: 'Skills', languagePatterns: 'Language patterns', corrections: 'Priority corrections', lessonProgress: 'Lesson progress', teacherPlan: 'Next lesson plan', homework: 'Homework',
-    meetingContext: 'Meeting context', executiveBrief: 'Manager brief', decisions: 'Confirmed decisions', actionItems: 'Explicit action items', proposals: 'Proposals', risks: 'Risks', blockers: 'Blockers', dependencies: 'Dependencies', participantViews: 'Participant views', tensions: 'Tensions and trade-offs', strategicImplications: 'Strategic implications', metrics: 'Metrics', openQuestions: 'Open questions', nextMeeting: 'Recommended next meeting',
+    meetingContext: 'Meeting context', executiveBrief: 'Manager brief', decisions: 'Confirmed decisions', actionItems: 'Agreed actions', proposals: 'Proposals', risks: 'Risks', blockers: 'Blockers', dependencies: 'Dependencies', participantViews: 'Participant views', tensions: 'Tensions and trade-offs', strategicImplications: 'Strategic implications', metrics: 'Metrics', openQuestions: 'Open questions', nextMeeting: 'Recommended next meeting',
     statement: 'Statement', evidence: 'Evidence', speaker: 'Speaker', quote: 'Quote', level: 'Level', reasons: 'Reasons', coverage: 'Coverage', title: 'Title', language: 'Language',
   },
   pt: {
     report: 'Relatório verificado da conversa', recorded: 'Gravado em', generated: 'Gerado em', page: 'Página', of: 'de',
-    evidenceQuality: 'Qualidade das evidências', analysisModes: 'Perspectivas de análise', keyPoints: 'Pontos principais', version: 'Versão do relatório',
-    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', transcriptEvidence: 'Evidência da transcrição', evidenceCatalog: 'Catálogo de evidências', transcriptionUncertainties: 'Incertezas de transcrição', probableReading: 'Leitura provável', bottomLine: 'Conclusão executiva', criticalFindings: 'Achados críticos', recommendedActions: 'Ações recomendadas', unansweredQuestions: 'Perguntas que limitam a decisão', missingInformation: 'Informações ausentes',
+    evidenceQuality: 'Qualidade das evidências', analysisModes: 'Perspectivas de análise', keyFindings: 'Principais conclusões', version: 'Versão do relatório',
+    purpose: 'Objetivo', limitations: 'Limitações das evidências', summary: 'Resumo executivo', nextSteps: 'Próximos passos', transcriptEvidence: 'Evidência da transcrição', evidenceCatalog: 'Apêndice de evidências', transcriptionUncertainties: 'Incertezas de transcrição', probableReading: 'Leitura provável', bottomLine: 'Conclusão executiva', recommendedActions: 'Recomendações da IA', unansweredQuestions: 'Questões ainda abertas', missingInformation: 'Informações ausentes',
+    overallAssessment: 'Avaliação geral', signalsAndCompetencies: 'Sinais e competências', evaluatedAnswers: 'Respostas avaliadas', preparationPlan: 'Plano de preparação', learnerAssessment: 'Avaliação do aluno', patternsAndCorrections: 'Padrões e correções', progressGroup: 'Progresso', nextLessonGroup: 'Próxima aula', decisionsAndActions: 'Decisões e ações', risksAndPending: 'Riscos e pendências', contextAndParticipants: 'Contexto e participantes', metricsAndImplications: 'Métricas e implicações',
     interview: 'Análise de entrevista', languageClass: 'Análise da aula de idioma', meeting: 'Análise da reunião', lens: 'Perspectiva de análise',
     verify: 'A análise gerada por IA deve ser conferida na transcrição. Recomendações são orientações, não fatos da conversa.',
     context: 'Contexto', executiveAssessment: 'Avaliação executiva', overallScore: 'Nota geral', scoreConfidence: 'Confiança da nota', outcomeForecast: 'Expectativa direcional', evidenceSignal: 'Força das evidências observadas', decisionReadiness: 'Prontidão para decisão', keyTradeoff: 'Trade-off central', rationale: 'Justificativa', caveat: 'Ressalva',
     strengths: 'Evidências mais fortes', concerns: 'Pontos de atenção', contradictions: 'Contradições', competencies: 'Competências', questionReviews: 'Análise pergunta a pergunta', coaching: 'Plano de preparação', priorities: 'Prioridades', candidateQuestions: 'Perguntas do candidato', practiceQuestions: 'Perguntas para prática',
     lessonContext: 'Contexto da aula', objective: 'Objetivo', targetLanguage: 'Idioma-alvo', learnerSpeakers: 'Alunos', teacherSpeakers: 'Professores', topics: 'Tópicos', learnerProfiles: 'Perfis dos alunos', cefr: 'CEFR', skills: 'Habilidades', languagePatterns: 'Padrões de linguagem', corrections: 'Correções prioritárias', lessonProgress: 'Progresso da aula', teacherPlan: 'Plano da próxima aula', homework: 'Tarefa de casa',
-    meetingContext: 'Contexto da reunião', executiveBrief: 'Briefing do gerente', decisions: 'Decisões confirmadas', actionItems: 'Pontos de ação explícitos', proposals: 'Propostas', risks: 'Riscos', blockers: 'Bloqueios', dependencies: 'Dependências', participantViews: 'Visões dos participantes', tensions: 'Tensões e trade-offs', strategicImplications: 'Implicações estratégicas', metrics: 'Métricas', openQuestions: 'Perguntas em aberto', nextMeeting: 'Próxima reunião recomendada',
+    meetingContext: 'Contexto da reunião', executiveBrief: 'Briefing do gerente', decisions: 'Decisões confirmadas', actionItems: 'Ações acordadas', proposals: 'Propostas', risks: 'Riscos', blockers: 'Bloqueios', dependencies: 'Dependências', participantViews: 'Visões dos participantes', tensions: 'Tensões e trade-offs', strategicImplications: 'Implicações estratégicas', metrics: 'Métricas', openQuestions: 'Perguntas em aberto', nextMeeting: 'Próxima reunião recomendada',
     statement: 'Síntese', evidence: 'Evidência', speaker: 'Participante', quote: 'Trecho', level: 'Nível', reasons: 'Motivos', coverage: 'Cobertura', title: 'Título', language: 'Idioma',
   },
   es: {
     report: 'Informe verificado de la conversación', recorded: 'Grabado', generated: 'Generado', page: 'Página', of: 'de',
-    evidenceQuality: 'Calidad de la evidencia', analysisModes: 'Perspectivas de análisis', keyPoints: 'Puntos principales', version: 'Versión del informe',
-    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', transcriptEvidence: 'Evidencia de la transcripción', evidenceCatalog: 'Catálogo de evidencias', transcriptionUncertainties: 'Incertidumbres de transcripción', probableReading: 'Lectura probable', bottomLine: 'Conclusión ejecutiva', criticalFindings: 'Hallazgos críticos', recommendedActions: 'Acciones recomendadas', unansweredQuestions: 'Preguntas que limitan la decisión', missingInformation: 'Información ausente',
+    evidenceQuality: 'Calidad de la evidencia', analysisModes: 'Perspectivas de análisis', keyFindings: 'Conclusiones principales', version: 'Versión del informe',
+    purpose: 'Objetivo', limitations: 'Limitaciones de la evidencia', summary: 'Resumen ejecutivo', nextSteps: 'Próximos pasos', transcriptEvidence: 'Evidencia de la transcripción', evidenceCatalog: 'Apéndice de evidencias', transcriptionUncertainties: 'Incertidumbres de transcripción', probableReading: 'Lectura probable', bottomLine: 'Conclusión ejecutiva', recommendedActions: 'Recomendaciones de la IA', unansweredQuestions: 'Cuestiones aún abiertas', missingInformation: 'Información ausente',
+    overallAssessment: 'Evaluación general', signalsAndCompetencies: 'Señales y competencias', evaluatedAnswers: 'Respuestas evaluadas', preparationPlan: 'Plan de preparación', learnerAssessment: 'Evaluación del alumno', patternsAndCorrections: 'Patrones y correcciones', progressGroup: 'Progreso', nextLessonGroup: 'Próxima clase', decisionsAndActions: 'Decisiones y acciones', risksAndPending: 'Riesgos y pendientes', contextAndParticipants: 'Contexto y participantes', metricsAndImplications: 'Métricas e implicaciones',
     interview: 'Análisis de entrevista', languageClass: 'Análisis de la clase de idioma', meeting: 'Análisis de la reunión', lens: 'Perspectiva de análisis',
     verify: 'El análisis generado por IA debe verificarse con la transcripción. Las recomendaciones son orientación, no hechos de la conversación.',
     context: 'Contexto', executiveAssessment: 'Evaluación ejecutiva', overallScore: 'Puntuación general', scoreConfidence: 'Confianza de la puntuación', outcomeForecast: 'Previsión orientativa', evidenceSignal: 'Fuerza de la evidencia observada', decisionReadiness: 'Preparación para decidir', keyTradeoff: 'Trade-off central', rationale: 'Justificación', caveat: 'Salvedad',
     strengths: 'Evidencias más sólidas', concerns: 'Puntos de atención', contradictions: 'Contradicciones', competencies: 'Competencias', questionReviews: 'Revisión pregunta por pregunta', coaching: 'Plan de preparación', priorities: 'Prioridades', candidateQuestions: 'Preguntas del candidato', practiceQuestions: 'Preguntas de práctica',
     lessonContext: 'Contexto de la clase', objective: 'Objetivo', targetLanguage: 'Idioma objetivo', learnerSpeakers: 'Alumnos', teacherSpeakers: 'Profesores', topics: 'Temas', learnerProfiles: 'Perfiles de alumnos', cefr: 'CEFR', skills: 'Habilidades', languagePatterns: 'Patrones de lenguaje', corrections: 'Correcciones prioritarias', lessonProgress: 'Progreso de la clase', teacherPlan: 'Plan de la próxima clase', homework: 'Tarea',
-    meetingContext: 'Contexto de la reunión', executiveBrief: 'Resumen para el gerente', decisions: 'Decisiones confirmadas', actionItems: 'Acciones explícitas', proposals: 'Propuestas', risks: 'Riesgos', blockers: 'Bloqueos', dependencies: 'Dependencias', participantViews: 'Perspectivas de participantes', tensions: 'Tensiones y trade-offs', strategicImplications: 'Implicaciones estratégicas', metrics: 'Métricas', openQuestions: 'Preguntas abiertas', nextMeeting: 'Próxima reunión recomendada',
+    meetingContext: 'Contexto de la reunión', executiveBrief: 'Resumen para el gerente', decisions: 'Decisiones confirmadas', actionItems: 'Acciones acordadas', proposals: 'Propuestas', risks: 'Riesgos', blockers: 'Bloqueos', dependencies: 'Dependencias', participantViews: 'Perspectivas de participantes', tensions: 'Tensiones y trade-offs', strategicImplications: 'Implicaciones estratégicas', metrics: 'Métricas', openQuestions: 'Preguntas abiertas', nextMeeting: 'Próxima reunión recomendada',
     statement: 'Síntesis', evidence: 'Evidencia', speaker: 'Participante', quote: 'Fragmento', level: 'Nivel', reasons: 'Motivos', coverage: 'Cobertura', title: 'Título', language: 'Idioma',
   },
 };
@@ -89,11 +93,11 @@ function safeFileName(value: string): string {
 export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfInput): jsPDF {
   const language = languageFor(locale);
   const copy = { ...COPY[language], ...FIELD_COPY[language] };
-  const safe = isRecord(analysis) ? analysis : {};
+  const safe = normalizeAnalysisReport(analysis);
   const summary = isRecord(safe.summary) ? safe.summary : {};
   const evidenceQuality = isRecord(safe.evidenceQuality) ? safe.evidenceQuality : {};
   const modes = asArray(safe.analysisModes).map((mode) => scalarText(mode, language)).filter(Boolean);
-  const keyPoints = asArray(summary.keyPoints);
+  const keyFindings = asArray(summary.keyFindings);
   const limitations = [...asArray(evidenceQuality.limitations), ...asArray(evidenceQuality.missingInformation)].map((item) => scalarText(item, language)).filter(Boolean);
   const doc = new jsPDF({ format: 'a4', unit: 'mm', compress: true, putOnlyUsedFonts: true });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -162,7 +166,7 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
     const stats = [
       [copy.evidenceQuality, scalarText(evidenceQuality.level, language) || '—'],
       [copy.analysisModes, String(modes.length)],
-      [copy.keyPoints, String(keyPoints.length)],
+      [copy.keyFindings, String(keyFindings.length)],
       [copy.version, scalarText(safe.version, language) || '—'],
     ];
     ensureSpace(22);
@@ -184,7 +188,7 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
       const references = evidence.map((item) => {
         const citationId = scalarText(item.citationId, language);
         const turnId = scalarText(item.turnId, language);
-        return turnId ? `${citationId} · ${turnId}` : citationId;
+        return turnId ? `[${citationId}] · ${turnId}` : `[${citationId}]`;
       }).join('   ');
       addText(`${copy.transcriptEvidence.toUpperCase()}: ${references}`, { size: 7.2, bold: true, color: accent, x: marginX + 4, width: contentWidth - 8, gapAfter: 2 });
       return;
@@ -253,8 +257,6 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
   addText('Voxa.', { size: 13, bold: true, color: accent, gapAfter: 10 });
   addEyebrow(copy.report);
   addText(scalarText(summary.title, language) || recording.name || 'Voxa conversation', { size: 25, bold: true, gapAfter: 6 });
-  const executiveBrief = isRecord(summary.executiveBrief) ? scalarText(summary.executiveBrief.statement, language) : scalarText(summary.executiveBrief, language);
-  addText(executiveBrief, { size: 12.5, color: [67, 72, 66], gapAfter: 6 });
   const purpose = isRecord(summary.purpose) ? scalarText(summary.purpose.statement, language) : scalarText(summary.purpose, language);
   if (purpose) addPanel(copy.purpose, purpose);
 
@@ -267,28 +269,34 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
     const statement = scalarText(summary.bottomLine.statement, language);
     if (statement) addPanel(copy.bottomLine, statement);
   }
-  renderNode('criticalFindings', summary.criticalFindings);
+  renderNode('keyFindings', summary.keyFindings);
+  if (asArray(summary.recommendedActions).length || asArray(summary.unansweredQuestions).length) addSectionTitle(copy.nextSteps);
   renderNode('recommendedActions', summary.recommendedActions);
   renderNode('unansweredQuestions', summary.unansweredQuestions);
-
-  if (keyPoints.length) {
-    addSectionTitle(copy.keyPoints);
-    keyPoints.forEach((item, index) => {
-      if (!isRecord(item)) return;
-      const statement = scalarText(item.statement, language);
-      const category = scalarText(item.category, language) || `${copy.keyPoints} ${index + 1}`;
-      if (statement) addPanel(`${String(index + 1).padStart(2, '0')} · ${category}`, statement);
-    });
-  }
-  if (limitations.length) {
-    addSectionTitle(copy.limitations);
-    addPanel(copy.evidenceQuality, limitations.map((item) => `• ${item}`).join('\n'), 'muted');
-  }
   addText(copy.verify, { size: 7.8, color: muted, gapAfter: 3 });
 
-  const modeEntries: Array<[string, unknown]> = [['interview', safe.interview], ['languageClass', safe.languageClass], ['meeting', safe.meeting]];
+  const modeEntries: Array<[string, unknown, Array<[string, string[]]>]> = [
+    ['interview', safe.interview, [
+      ['overallAssessment', ['context', 'executiveAssessment']],
+      ['signalsAndCompetencies', ['strengths', 'concerns', 'contradictions', 'competencies']],
+      ['evaluatedAnswers', ['questionReviews']],
+      ['preparationPlan', ['coaching']],
+    ]],
+    ['languageClass', safe.languageClass, [
+      ['learnerAssessment', ['lessonContext', 'learnerProfiles']],
+      ['patternsAndCorrections', ['languagePatterns', 'corrections']],
+      ['progressGroup', ['lessonProgress']],
+      ['nextLessonGroup', ['teacherPlan']],
+    ]],
+    ['meeting', safe.meeting, [
+      ['decisionsAndActions', ['executiveBrief', 'decisions', 'actionItems', 'proposals']],
+      ['risksAndPending', ['risks', 'blockers', 'dependencies', 'openQuestions', 'nextMeeting']],
+      ['contextAndParticipants', ['meetingContext', 'participantViews', 'topics']],
+      ['metricsAndImplications', ['metrics', 'strategicImplications', 'tensions']],
+    ]],
+  ];
   let lensIndex = 0;
-  modeEntries.forEach(([key, value]) => {
+  modeEntries.forEach(([key, value, groups]) => {
     if (!isRecord(value)) return;
     lensIndex += 1;
     if (lensIndex === 1 || y > 90) addPage();
@@ -299,12 +307,20 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
     }
     addEyebrow(`${copy.lens} ${String(lensIndex).padStart(2, '0')}`);
     addText(copy[key], { size: 22, bold: true, gapAfter: 8 });
-    Object.entries(value).forEach(([childKey, childValue]) => renderNode(childKey, childValue));
+    groups.forEach(([groupKey, keys]) => {
+      const populated = keys.filter((childKey) => {
+        const child = value[childKey];
+        return child !== null && child !== undefined && child !== '' && (!Array.isArray(child) || child.length);
+      });
+      if (!populated.length) return;
+      addSectionTitle(copy[groupKey]);
+      populated.forEach((childKey) => renderNode(childKey, value[childKey]));
+    });
   });
 
   const evidenceCatalog = asArray(evidenceQuality.evidenceCatalog).filter(isRecord);
   const transcriptionUncertainties = asArray(evidenceQuality.transcriptionUncertainties).filter(isRecord);
-  if (evidenceCatalog.length || transcriptionUncertainties.length) {
+  if (evidenceCatalog.length || transcriptionUncertainties.length || limitations.length) {
     addPage();
     addEyebrow(copy.transcriptEvidence);
     addText(copy.evidenceCatalog, { size: 22, bold: true, gapAfter: 8 });
@@ -314,9 +330,13 @@ export function createAnalysisPdfDocument({ analysis, recording, locale }: PdfIn
       const speaker = scalarText(item.speaker, language);
       const quote = scalarText(item.quote, language);
       ensureSpace(measure(quote, 8.8, contentWidth) + 14);
-      addText(`${citationId}${turnId ? ` · ${turnId}` : ''}${speaker ? ` · ${speaker}` : ''}`, { size: 7.3, bold: true, color: accent, gapAfter: 1.5 });
+      addText(`[${citationId}]${turnId ? ` · ${turnId}` : ''}${speaker ? ` · ${speaker}` : ''}`, { size: 7.3, bold: true, color: accent, gapAfter: 1.5 });
       addText(`“${quote}”`, { size: 8.8, color: muted, gapAfter: 4 });
     });
+    if (limitations.length) {
+      addSectionTitle(copy.limitations);
+      addPanel(copy.evidenceQuality, limitations.map((item) => `• ${item}`).join('\n'), 'muted');
+    }
     if (transcriptionUncertainties.length) {
       addSectionTitle(copy.transcriptionUncertainties);
       transcriptionUncertainties.forEach((item) => {

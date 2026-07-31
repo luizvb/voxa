@@ -11,17 +11,18 @@ const evidence = (speaker: string, quote: string) => {
 };
 
 const sample = {
-  version: '6.0',
+  version: '7.0',
   analysisModes: ['interview', 'language', 'meeting'],
   summary: {
     title: 'Product migration review',
     purpose: { statement: 'Review a staged migration plan, evaluate the candidate explanation and practice concise English updates.', evidence: evidence('Morgan', 'Today we will review the migration plan and practice a concise project update') },
-    executiveBrief: { statement: 'The team chose a staged migration. Alex demonstrated clear ownership and measurable impact, but the decision trade-offs and rollback threshold still need stronger explanation.', evidence: evidence('Alex', 'I owned the migration plan and reduced failed imports by thirty percent') },
-    keyPoints: [
-      { category: 'decision', statement: 'The migration will run in two controlled stages.', evidence: evidence('Morgan', 'We will split the migration into two stages') },
-      { category: 'risk', statement: 'The rollback threshold remains unapproved.', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') },
-      { category: 'coaching', statement: 'Alex should make decision trade-offs explicit.', evidence: evidence('Interviewer', 'What did you choose not to do and why') },
+    bottomLine: { statement: 'Proceed with the staged migration, but approve the rollback threshold before execution.', confidence: 'high', evidence: evidence('Morgan', 'We will split the migration into two stages') },
+    keyFindings: [
+      { finding: 'The migration will run in two controlled stages.', significance: 'The team replaced a full cutover with a lower-risk sequence.', businessImpact: 'Limits the blast radius of import failures.', confidence: 'high', evidence: evidence('Morgan', 'We will split the migration into two stages') },
+      { finding: 'The rollback threshold remains unapproved.', significance: 'The team lacks a shared stop condition.', businessImpact: 'Execution could continue after risk becomes unacceptable.', confidence: 'high', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') },
     ],
+    recommendedActions: [{ action: 'Approve the rollback threshold before the first stage.', priority: 'immediate', rationale: 'The threshold is the remaining execution control.', expectedOutcome: 'A clear go/no-go rule for the migration.', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') }],
+    unansweredQuestions: [{ question: 'Which signal triggers rollback?', whyItMatters: 'The operating decision cannot be enforced without a measurable trigger.', evidence: evidence('Morgan', 'We still need approval for the rollback threshold') }],
     language: 'en-US',
   },
   evidenceQuality: { level: 'high', coverage: { speakerLabels: 'clear', substantiveTurns: 18, selectedModeFit: 'high' }, reasons: ['Stable labels and explicit commitments.'], limitations: ['Pronunciation cannot be assessed from text.'] },
@@ -113,5 +114,5 @@ const transcriptSegments = [{
 }];
 
 export default function InsightsPreview() {
-  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the structured v6 report.</p></header><AIAnalysis analysis={sample} grammarAudioEnabled transcriptSegments={transcriptSegments} audioAvailable onPlayAudioSegment={() => {}} /></main>;
+  return <main className="insights-preview"><header><span>Voxa UI preview</span><h1>Specialist insights</h1><p>Development fixture for the progressive v7 report.</p></header><AIAnalysis analysis={sample} grammarAudioEnabled transcriptSegments={transcriptSegments} audioAvailable onPlayAudioSegment={() => {}} /></main>;
 }

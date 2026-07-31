@@ -121,7 +121,7 @@ function collectEvidence(value: unknown, output: Array<{ speaker?: string; quote
 
 function claimItemsForMode(analysis: any, mode: AnalysisMode): any[] {
   const executiveClaims = [
-    ...(analysis?.summary?.criticalFindings || []),
+    ...(analysis?.summary?.keyFindings || []),
     ...(analysis?.summary?.recommendedActions || []),
     ...(analysis?.summary?.unansweredQuestions || [])
   ];
@@ -168,7 +168,7 @@ export function runDeterministicChecks(analysis: any, scenario: EvalScenario): D
   const expectedKeys = ['version', 'analysisModes', 'summary', 'evidenceQuality', 'interview', 'languageClass', 'meeting'];
   const actualKeys = analysis && typeof analysis === 'object' ? Object.keys(analysis) : [];
   const schemaValid = expectedKeys.length === actualKeys.length && expectedKeys.every((key, index) => actualKeys[index] === key);
-  push('schema', 'Exact v6 analysis schema', schemaValid && analysis?.version === '6.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
+  push('schema', 'Exact v7 analysis schema', schemaValid && analysis?.version === '7.0', 'critical', schemaValid ? `Version ${analysis?.version || 'missing'}.` : `Expected ${expectedKeys.join(', ')}; received ${actualKeys.join(', ')}.`);
   const selectedExactly = Array.isArray(analysis?.analysisModes) && analysis.analysisModes.length === 1 && analysis.analysisModes[0] === scenario.mode;
   push('selected-mode', 'Selected mode is exact', selectedExactly, 'critical', `Expected only ${scenario.mode}.`);
   const modeObjects: Record<AnalysisMode, string> = { interview: 'interview', language: 'languageClass', meeting: 'meeting' };

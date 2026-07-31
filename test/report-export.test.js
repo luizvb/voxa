@@ -39,7 +39,7 @@ test('report export escapes user and model-provided HTML', () => {
   assert.match(html, /&lt;img src=x&gt;/);
 });
 
-test('PDF report reads the structured v5 executive insight fields', () => {
+test('PDF report normalizes and exports structured legacy insight fields', () => {
   const html = buildAnalysisReportHtml({
     recording: { name: 'Structured review' },
     analysis: {
@@ -61,14 +61,14 @@ test('PDF report reads the structured v5 executive insight fields', () => {
       meeting: { executiveBrief: { bottomLine: 'Proceed with a staged rollout.', outcome: 'A staged plan was selected.', whatChanged: [], needsDecision: [], needsEscalation: [], managementAttention: ['Confirm the revenue baseline.'] }, decisions: [], actionItems: [], proposals: [], risks: [], blockers: [], metrics: [], openQuestions: [], tensions: [{ topic: 'Speed versus evidence', positions: ['Launch now', 'Validate economics first'], implication: 'The schedule may move.', resolutionNeeded: 'Agree on a validation gate.', evidence: [] }], strategicImplications: [{ implication: 'The operating model becomes reusable.', whyItMatters: 'It lowers future launch cost.', timeHorizon: 'near_term', evidence: [] }], topics: [] }
     }
   });
-  assert.match(html, /A grounded executive brief/);
+  assert.doesNotMatch(html, /A grounded executive brief/);
   assert.match(html, /Execution is credible/);
   assert.match(html, /The rollout has an accountable owner/);
   assert.match(html, /Validate the revenue baseline/);
   assert.match(html, /What is the baseline revenue/);
   assert.match(html, /Revenue baseline was not stated/);
   assert.match(html, /Assess the conversation/);
-  assert.match(html, /A grounded key point/);
+  assert.doesNotMatch(html, /A grounded key point/);
   assert.match(html, /Clear ownership/);
   assert.match(html, /Strong ownership, limited commercial evidence/);
   assert.match(html, /Decision readiness/);
@@ -90,13 +90,12 @@ test('PDF report prints reused evidence as references and the quote once in the 
     locale: 'pt-BR',
     recording: { name: 'Entrevista' },
     analysis: {
-      version: '6.0',
+      version: '7.0',
       analysisModes: ['interview'],
       summary: {
         title: 'Entrevista',
-        executiveBrief: { statement: 'Síntese.' },
         bottomLine: { statement: 'Há evidência de liderança.', evidence: [reference] },
-        criticalFindings: [{ finding: 'Liderança', significance: 'Relevante.', businessImpact: 'Execução.', evidence: [reference] }]
+        keyFindings: [{ finding: 'Liderança', significance: 'Relevante.', businessImpact: 'Execução.', evidence: [reference] }]
       },
       evidenceQuality: {
         level: 'high',
@@ -111,5 +110,26 @@ test('PDF report prints reused evidence as references and the quote once in the 
   });
   assert.equal(html.split(quote).length - 1, 1);
   assert.ok((html.match(/E001/g) || []).length >= 4);
-  assert.match(html, /Catálogo de evidências/);
+  assert.match(html, /Apêndice de evidências/);
+  assert.match(html, /\[E001\]/);
+});
+
+test('PDF report preserves v6 summary content through the read normalizer', () => {
+  const html = buildAnalysisReportHtml({
+    locale: 'en-US',
+    recording: { name: 'Legacy report' },
+    analysis: {
+      version: '6.0',
+      analysisModes: [],
+      summary: {
+        title: 'Legacy report',
+        executiveBrief: { statement: 'Legacy decision summary.' },
+        keyPoints: [{ statement: 'Legacy grounded point.' }]
+      },
+      evidenceQuality: {}
+    }
+  });
+  assert.match(html, /Legacy decision summary/);
+  assert.match(html, /Legacy grounded point/);
+  assert.match(html, /Key findings/);
 });
