@@ -6,16 +6,21 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('v7 report is a progressive briefing with three destinations and closed details', () => {
+test('v7 report is a continuous briefing with visible sections and evidence', () => {
   const component = read('src/components/AIAnalysis.tsx');
   assert.match(component, /normalizeAnalysisReport\(analysis\)/);
   assert.match(component, /reportId}-summary/);
   assert.match(component, /reportId}-details/);
   assert.match(component, /reportId}-quality/);
+  assert.match(component, /analysis-lens-sections/);
+  assert.match(component, /reportId}-mode-interview/);
+  assert.match(component, /reportId}-mode-language/);
+  assert.match(component, /reportId}-mode-meeting/);
+  assert.match(component, /<section className={`report-section/);
   assert.doesNotMatch(component, /next-steps-section/);
-  assert.doesNotMatch(component, /open=\{index === 0\}/);
   assert.doesNotMatch(component, /focusReportTarget\(`citation-/);
-  assert.match(component, /<details className="evidence-disclosure">/);
+  assert.doesNotMatch(component, /<details|<summary|role="tab"/);
+  assert.match(component, /<aside className="evidence-disclosure"/);
   assert.match(component, /\[\{citationId\}\]/);
 });
 
@@ -57,8 +62,10 @@ test('language report uses role-neutral labels and omits educational context met
 
 test('report controls retain focus and reduced-motion treatment at compact widths', () => {
   const css = read('src/index.css');
-  assert.match(css, /\.analysis-view :where\(button, summary, \[tabindex="0"\]\):focus-visible/);
+  assert.match(css, /\.analysis-view :where\(button, \[tabindex="0"\]\):focus-visible/);
   assert.match(css, /\.analysis-section-nav \{ grid-template-columns: repeat\(3/);
+  assert.match(css, /\.analysis-lens-sections \{ display: grid/);
+  assert.match(css, /\.report-section-body/);
   assert.match(css, /@media \(max-width: 860px\)/);
   assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /@media \(max-width: 390px\)/);

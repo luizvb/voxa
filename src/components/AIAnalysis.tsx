@@ -1,11 +1,10 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
   BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
   CircleHelp,
   ClipboardCheck,
   Flag,
@@ -61,8 +60,8 @@ function Evidence({ items, label }: { items: any[]; label: string }) {
   const evidence = asArray(items).filter((item) => item?.quote || typeof item === 'string');
   if (!evidence.length) return null;
   return (
-    <details className="evidence-disclosure">
-      <summary><Quote aria-hidden="true" /><span>{label}</span><b aria-label={`${evidence.length}`}>{evidence.length}</b><ChevronDown aria-hidden="true" /></summary>
+    <aside className="evidence-disclosure" aria-label={label}>
+      <header><Quote aria-hidden="true" /><span>{label}</span><b aria-label={`${evidence.length}`}>{evidence.length}</b></header>
       <div className="evidence-stack">
         {evidence.map((item, index) => {
           const quote = typeof item === 'string' ? item : item.quote;
@@ -71,16 +70,16 @@ function Evidence({ items, label }: { items: any[]; label: string }) {
           return <blockquote key={`${quote}-${index}`}><header>{citationId && <code>[{citationId}]</code>}{speaker && <b>{speaker}</b>}</header><span>{quote}</span></blockquote>;
         })}
       </div>
-    </details>
+    </aside>
   );
 }
 
-function ReportDisclosure({ title, icon: Icon, count, children, className = '' }: { title: string; icon: any; count?: number; children: ReactNode; className?: string }) {
+function ReportSection({ title, icon: Icon, count, children, className = '' }: { title: string; icon: any; count?: number; children: ReactNode; className?: string }) {
   return (
-    <details className={`report-disclosure ${className}`}>
-      <summary><Icon aria-hidden="true" /><span>{title}</span>{typeof count === 'number' && <b aria-label={`${count}`}>{count}</b>}<ChevronDown aria-hidden="true" /></summary>
-      <div className="report-disclosure-body">{children}</div>
-    </details>
+    <section className={`report-section ${className}`}>
+      <header className="report-section-heading"><Icon aria-hidden="true" /><h4>{title}</h4>{typeof count === 'number' && <b aria-label={`${count}`}>{count}</b>}</header>
+      <div className="report-section-body">{children}</div>
+    </section>
   );
 }
 
@@ -90,13 +89,13 @@ function EvidenceQuality({ quality, t }: { quality: any; t: any }) {
   const missing = asArray(quality?.missingInformation);
   const citationSummary = quality?.citationSummary || {};
   return (
-    <ReportDisclosure title={t('ai', 'evidenceQuality')} icon={ShieldCheck} count={limitations.length + missing.length + uncertainties.length} className="evidence-quality-disclosure">
+    <ReportSection title={t('ai', 'evidenceQuality')} icon={ShieldCheck} count={limitations.length + missing.length + uncertainties.length} className="evidence-quality-disclosure">
       {quality?.confidenceRationale && <p>{quality.confidenceRationale}</p>}
       <dl className="quality-stats"><div><dt>{t('ai', 'evidenceQuality')}</dt><dd>{level(quality?.level)}</dd></div><div><dt>{t('ai', 'uniqueCitations')}</dt><dd>{citationSummary.uniqueCitations ?? 0}</dd></div><div><dt>{t('ai', 'evidenceReferences')}</dt><dd>{citationSummary.totalReferences ?? 0}</dd></div><div><dt>{t('ai', 'repeatedReferences')}</dt><dd>{citationSummary.repeatedReferences ?? 0}</dd></div></dl>
       {!!limitations.length && <div><h5>{t('ai', 'limitations')}</h5><InsightList items={limitations} empty={t('ai', 'notAvailable')} /></div>}
       {!!missing.length && <div><h5>{t('ai', 'missingInformation')}</h5><InsightList items={missing} empty={t('ai', 'notAvailable')} /></div>}
       {!!uncertainties.length && <div className="transcription-uncertainties"><h5><AlertTriangle aria-hidden="true" />{t('ai', 'transcriptionUncertainties')}</h5>{uncertainties.map((item, index) => <article key={`${item.turnId}-${item.original}-${index}`}><header><b>{item.turnId}</b><span>{level(item.confidence)}</span></header><del>{item.original}</del><p><strong>{t('ai', 'probableReading')}:</strong> {item.probableReading}</p><small>{item.rationale}</small></article>)}</div>}
-    </ReportDisclosure>
+    </ReportSection>
   );
 }
 
@@ -154,14 +153,14 @@ function InterviewReport({ interview, t, fallback }: { interview: any; t: any; f
         { label: t('ai', 'interviewers'), value: context.interviewers },
       ]} />
 
-      <ReportDisclosure title={t('ai', 'overallAssessment')} icon={BriefcaseBusiness}>
+      <ReportSection title={t('ai', 'overallAssessment')} icon={BriefcaseBusiness}>
       <section className="executive-assessment">
         <div className="large-score"><strong>{score(assessment.overallScore, fallback)}</strong><small>{t('ai', 'overallScore')}</small></div>
         <div><span>{t('ai', 'evidenceSignal')}</span><h4>{level(assessment.evidenceSignal || assessment.outcomeForecast)}</h4><p>{sentence(assessment.rationale, fallback)}</p>{assessment.keyTradeoff && <p className="next-question"><b>{t('ai', 'keyTradeoff')}:</b> {assessment.keyTradeoff}</p>}<div className="assessment-meta"><b>{t('ai', 'confidence')}</b><span>{level(assessment.scoreConfidence)}</span><b>{t('ai', 'decisionReadiness')}</b><span>{level(assessment.decisionReadiness)}</span></div><Evidence items={assessment.evidence} label={t('ai', 'showEvidence')} /><small>{sentence(assessment.caveat, t('ai', 'forecastCaveat'))}</small></div>
       </section>
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'signalsAndCompetencies')} icon={Target}>
+      <ReportSection title={t('ai', 'signalsAndCompetencies')} icon={Target}>
       <div className="analysis-register-grid">
         <SignalRegister title={t('ai', 'strongestEvidence')} icon={CheckCircle2} items={asArray(interview.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" />
         <SignalRegister title={t('ai', 'materialConcerns')} icon={Flag} items={asArray(interview.concerns)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" />
@@ -170,15 +169,15 @@ function InterviewReport({ interview, t, fallback }: { interview: any; t: any; f
       {!!contradictions.length && <section className="analysis-register is-critical"><RegisterHeading icon={AlertTriangle} title={t('ai', 'contradictions')} count={contradictions.length} /><div className="contradiction-list">{contradictions.map((item, index) => <article key={`${item.topic}-${index}`}><header><strong>{item.topic}</strong></header><div><blockquote>{item.firstStatement}</blockquote><blockquote>{item.secondStatement}</blockquote></div><p>{item.whyItMatters}</p><p className="next-question"><b>{t('ai', 'verifyWith')}:</b> {item.verificationQuestion}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
 
       <section className="analysis-register"><RegisterHeading icon={Target} title={t('ai', 'competencies')} count={asArray(interview.competencies).length} /><div className="competency-table">{asArray(interview.competencies).map((item, index) => <article key={`${item.name}-${index}`}><header><strong>{item.name}</strong><b>{score(item.score, fallback)}</b></header><div><p>{item.demonstrated || item.assessment}</p><small>{item.missing || item.gap}</small></div><span>{level(item.confidence)}</span><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'evaluatedAnswers')} icon={MessageCircle} count={questions.length}>
-      <section className="analysis-register"><RegisterHeading icon={MessageCircle} title={t('ai', 'questionReview')} count={questions.length} /><div className="question-review-list">{questions.map((item, index) => <details key={`${item.question}-${index}`}><summary><span>{index + 1}</span><strong>{item.question}</strong><b>{score(item.score, fallback)}</b><ChevronDown /></summary><div className="question-review-body"><p>{item.answerSummary}</p><div className="dimension-grid">{Object.entries(item.dimensions || {}).map(([key, value]) => <div key={key}><small>{t('ai', key)}</small><strong>{score(value, fallback)}</strong></div>)}</div><div className="review-columns"><div><small>{t('ai', 'whatWorked')}</small><InsightList items={asArray(item.whatWorked)} empty={fallback} /></div><div><small>{t('ai', 'improve')}</small><InsightList items={asArray(item.improve)} empty={fallback} /></div></div>{item.betterAnswerOutline && <p className="better-answer"><b>{t('ai', 'betterAnswer')}:</b> {item.betterAnswerOutline}</p>}{!!asArray(item.followUps).length && <div><small>{t('ai', 'followUps')}</small><InsightList items={item.followUps} empty={fallback} /></div>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></details>)}</div></section>
-      </ReportDisclosure>
+      <ReportSection title={t('ai', 'evaluatedAnswers')} icon={MessageCircle} count={questions.length}>
+      <section className="analysis-register"><RegisterHeading icon={MessageCircle} title={t('ai', 'questionReview')} count={questions.length} /><div className="question-review-list">{questions.map((item, index) => <article key={`${item.question}-${index}`}><header><span>{index + 1}</span><strong>{item.question}</strong><b>{score(item.score, fallback)}</b></header><div className="question-review-body"><p>{item.answerSummary}</p><div className="dimension-grid">{Object.entries(item.dimensions || {}).map(([key, value]) => <div key={key}><small>{t('ai', key)}</small><strong>{score(value, fallback)}</strong></div>)}</div><div className="review-columns"><div><small>{t('ai', 'whatWorked')}</small><InsightList items={asArray(item.whatWorked)} empty={fallback} /></div><div><small>{t('ai', 'improve')}</small><InsightList items={asArray(item.improve)} empty={fallback} /></div></div>{item.betterAnswerOutline && <p className="better-answer"><b>{t('ai', 'betterAnswer')}:</b> {item.betterAnswerOutline}</p>}{!!asArray(item.followUps).length && <div><small>{t('ai', 'followUps')}</small><InsightList items={item.followUps} empty={fallback} /></div>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div></section>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'preparationPlan')} icon={ClipboardCheck}>
-      <section className="analysis-register coaching-register"><RegisterHeading icon={ClipboardCheck} title={t('ai', 'preparationPlan')} count={asArray(coaching.priorities).length} /><div className="priority-list">{asArray(coaching.priorities).map((item, index) => <article key={`${item.focus}-${index}`}><span>{item.priority || index + 1}</span><div><strong>{item.focus}</strong><p>{item.basedOn}</p><InsightList items={asArray(item.actions)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div><div className="coaching-questions"><div><h5>{t('ai', 'candidateQuestions')}</h5>{asArray(coaching.candidateQuestions).map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.whyAsk}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'practiceQuestions')}</h5>{asArray(coaching.practiceQuestions).map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.why}</p><small>{item.targetSignal}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
-      </ReportDisclosure>
+      <ReportSection title={t('ai', 'preparationPlan')} icon={ClipboardCheck} count={asArray(coaching.priorities).length}>
+      <section className="analysis-register coaching-register"><div className="priority-list">{asArray(coaching.priorities).map((item, index) => <article key={`${item.focus}-${index}`}><span>{item.priority || index + 1}</span><div><strong>{item.focus}</strong><p>{item.basedOn}</p><InsightList items={asArray(item.actions)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div><div className="coaching-questions"><div><h5>{t('ai', 'candidateQuestions')}</h5>{asArray(coaching.candidateQuestions).map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.whyAsk}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'practiceQuestions')}</h5>{asArray(coaching.practiceQuestions).map((item, index) => <article key={`${item.question}-${index}`}><strong>{item.question}</strong><p>{item.why}</p><small>{item.targetSignal}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
+      </ReportSection>
     </section>
   );
 }
@@ -331,13 +330,13 @@ function LanguageReport({
       <SectionHeading icon={BookOpen} title={t('ai', 'languageAnalysis')} description={t('ai', 'languageTeacherDescription')} />
       {!!participants.length && <label className="language-participant-focus" id={`${learnerTabsId}-label`}><span>{t('ai', 'participantFocus')}</span><select value={selectedSpeaker} onChange={(event) => { stopBrowserSpeech(); setActiveLearner(event.target.value); }}>{participants.map((speaker) => <option key={speaker.toLocaleLowerCase()} value={speaker}>{speaker}</option>)}</select></label>}
       {grammarQueue.isPlaying && <div className="grammar-queue-toolbar is-playing"><div className="grammar-queue-now" aria-live="polite"><span>{selectedSpeaker} · {t('ai', 'grammar')} · {grammarQueueProgress}</span><strong>{queuedGrammarCorrections[grammarQueue.index]?.phrase}</strong></div><div className="grammar-queue-action"><button type="button" onClick={toggleGrammarQueue} aria-pressed="true"><Square aria-hidden="true" /><span>{t('ai', 'stopGrammarQueue')}</span></button></div></div>}
-      <ReportDisclosure title={t('ai', 'learnerAssessment')} icon={BookOpen}>
+      <ReportSection title={t('ai', 'learnerAssessment')} icon={BookOpen}>
       {lesson.executiveBrief && <section className="manager-brief"><small>{t('ai', 'executiveBrief')}</small><h4>{lesson.executiveBrief}</h4><Evidence items={lesson.evidence} label={t('ai', 'showEvidence')} /></section>}
 
       {learner ? <section className="learner-profile" id={`${learnerTabsId}-panel`} aria-labelledby={`${learnerTabsId}-label`}><header><div><small>{t('ai', 'learnerAssessment')}</small><h4>{learner.speaker}</h4><p>{learner.overallAssessment || learner.teacherFeedback}</p>{learner.highestLeverageChange && <p className="next-question"><b>{t('ai', 'highestLeverageChange')}:</b> {learner.highestLeverageChange}</p>}</div><div className="learner-level"><strong>{learner.cefr?.level || 'unknown'}</strong><span>CEFR</span><small>{level(learner.cefr?.confidence || learner.evidenceSufficiency)}</small></div></header>{learner.cefr?.rationale && <p className="cefr-rationale">{learner.cefr.rationale}</p>}<div className="skill-table">{Object.entries(learner.skills || {}).map(([key, value]: [string, any]) => <article key={key}><header><strong>{t('ai', key)}</strong><b>{score(value?.score, fallback)}</b></header><p>{value?.observation || fallback}</p><Evidence items={value?.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div className="analysis-register-grid"><SignalRegister title={t('ai', 'whatToReinforce')} icon={CheckCircle2} items={asArray(learner.strengths)} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-positive" /><SignalRegister title={t('ai', 'priorityGaps')} icon={TrendingUp} items={asArray(learner.priorities).map((item) => ({ ...item, demonstratedBy: item.pattern, hiringRelevance: item.communicationImpact || item.impact, verificationQuestion: item.nextStep }))} fallback={fallback} evidenceLabel={t('ai', 'showEvidence')} tone="is-warning" /></div>{learner.participation && <div className="participation-note"><b>{t('ai', 'participation')}:</b> {level(learner.participation.share)}. {learner.participation.interactionPattern}<Evidence items={learner.participation.evidence} label={t('ai', 'showEvidence')} /></div>}</section> : selectedSpeaker ? <section className="learner-profile-empty" id={`${learnerTabsId}-panel`} aria-labelledby={`${learnerTabsId}-label`}><h4>{selectedSpeaker}</h4><p>{t('ai', 'noProfileForParticipant')}</p></section> : <p className="analysis-muted">{t('ai', 'noProfileForParticipant')}</p>}
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'patternsAndCorrections')} icon={Layers3} count={visiblePatterns.length + visibleCorrections.length}>
+      <ReportSection title={t('ai', 'patternsAndCorrections')} icon={Layers3} count={visiblePatterns.length + visibleCorrections.length}>
       <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'languagePatterns')} count={visiblePatterns.length} />{visiblePatterns.length ? <div className="pattern-table">{visiblePatterns.map(({ item, scope }, index) => <article key={`${item.pattern}-${index}`}><header><span>{level(item.category || item.frequency)}</span><strong>{item.pattern}</strong><b>{level(item.frequency)}</b></header><ScopeLabel scope={scope} t={t} /><p>{item.impact}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div> : <p className="analysis-muted">{t('ai', 'noPatternsForParticipant')}</p>}</section>
 
       <section className="analysis-register">
@@ -413,15 +412,15 @@ function LanguageReport({
           })}
         </div> : <p className="analysis-muted">{t('ai', 'noCorrectionsForParticipant')}</p>}
       </section>
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'lessonProgress')} icon={TrendingUp}>
-      <section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'lessonProgress')} /><div className="progress-columns"><div><h5>{t('ai', 'successfulUse')}</h5>{visibleSuccessfulUse.map(({ item, scope }, index) => <article key={`${item.skill}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.skill}</strong><p>{item.whySuccessful}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'selfCorrections')}</h5>{visibleSelfCorrections.map(({ item, scope }, index) => <article key={`${item.observation}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.observation}</strong><p>{item.significance}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'missedOpportunities')}</h5>{visibleMissedOpportunities.map(({ item, scope }, index) => <article key={`${item.opportunity}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.opportunity}</strong><p>{item.coachPrompt}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
-      </ReportDisclosure>
+      <ReportSection title={t('ai', 'lessonProgress')} icon={TrendingUp} count={visibleSuccessfulUse.length + visibleSelfCorrections.length + visibleMissedOpportunities.length}>
+      <section className="analysis-register"><div className="progress-columns"><div><h5>{t('ai', 'successfulUse')}</h5>{visibleSuccessfulUse.map(({ item, scope }, index) => <article key={`${item.skill}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.skill}</strong><p>{item.whySuccessful}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'selfCorrections')}</h5>{visibleSelfCorrections.map(({ item, scope }, index) => <article key={`${item.observation}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.observation}</strong><p>{item.significance}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div><div><h5>{t('ai', 'missedOpportunities')}</h5>{visibleMissedOpportunities.map(({ item, scope }, index) => <article key={`${item.opportunity}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.opportunity}</strong><p>{item.coachPrompt}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></div></section>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'nextLessonPlan')} icon={CalendarClock}>
-      <section className="analysis-register coaching-register"><RegisterHeading icon={CalendarClock} title={t('ai', 'nextLessonPlan')} count={visibleNextLessonFocus.length} />{!!visibleReinforce.length && <div className="reinforce-list"><h5>{t('ai', 'whatToReinforce')}</h5>{visibleReinforce.map(({ item, scope }, index) => typeof item === 'string' ? <p key={`${item}-${index}`}><ScopeLabel scope={scope} t={t} />{item}</p> : <article key={`${item.focus}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.reason}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}<div className="priority-list">{visibleNextLessonFocus.map(({ item, scope }, index) => <article key={`${item.focus}-${index}`}><span>{index + 1}</span><div><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.why}</p><InsightList items={asArray(item.activities)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div>{!!visibleHomework.length && <div className="homework-list"><h5>{t('ai', 'homework')}</h5>{visibleHomework.map(({ item, scope }, index) => <article key={`${item.task}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.task}</strong><span>{item.durationMinutes ? `${item.durationMinutes} min` : ''}</span><p>{item.basedOn}</p><small>{item.successMetric}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}</section>
-      </ReportDisclosure>
+      <ReportSection title={t('ai', 'nextLessonPlan')} icon={CalendarClock} count={visibleNextLessonFocus.length}>
+      <section className="analysis-register coaching-register">{!!visibleReinforce.length && <div className="reinforce-list"><h5>{t('ai', 'whatToReinforce')}</h5>{visibleReinforce.map(({ item, scope }, index) => typeof item === 'string' ? <p key={`${item}-${index}`}><ScopeLabel scope={scope} t={t} />{item}</p> : <article key={`${item.focus}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.reason}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}<div className="priority-list">{visibleNextLessonFocus.map(({ item, scope }, index) => <article key={`${item.focus}-${index}`}><span>{index + 1}</span><div><ScopeLabel scope={scope} t={t} /><strong>{item.focus}</strong><p>{item.why}</p><InsightList items={asArray(item.activities)} empty={fallback} /><small>{t('ai', 'successMetric')}: {sentence(item.successMetric, fallback)}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></div></article>)}</div>{!!visibleHomework.length && <div className="homework-list"><h5>{t('ai', 'homework')}</h5>{visibleHomework.map(({ item, scope }, index) => <article key={`${item.task}-${index}`}><ScopeLabel scope={scope} t={t} /><strong>{item.task}</strong><span>{item.durationMinutes ? `${item.durationMinutes} min` : ''}</span><p>{item.basedOn}</p><small>{item.successMetric}</small><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div>}</section>
+      </ReportSection>
     </section>
   );
 }
@@ -434,31 +433,31 @@ function MeetingReport({ meeting, t, fallback }: { meeting: any; t: any; fallbac
     <section className="analysis-mode-section mode-meeting">
       <SectionHeading icon={Users} title={t('ai', 'meetingAnalysis')} description={t('ai', 'managerDescription')} />
 
-      <ReportDisclosure title={t('ai', 'decisionsAndActions')} icon={CheckCircle2} count={asArray(meeting.decisions).length + asArray(meeting.actionItems).length}>
+      <ReportSection title={t('ai', 'decisionsAndActions')} icon={CheckCircle2} count={asArray(meeting.decisions).length + asArray(meeting.actionItems).length}>
       <section className="analysis-register"><RegisterHeading icon={CheckCircle2} title={t('ai', 'decisions')} count={asArray(meeting.decisions).length} /><div className="decision-register">{asArray(meeting.decisions).map((item, index) => <article key={`${item.decision}-${index}`}><header><strong>{item.decision}</strong><span>{item.owner || level(item.confidence)}</span></header><p>{item.impact}</p>{item.rationale && <small>{item.rationale}</small>}{item.tradeoffs && <p className="next-question"><b>{t('ai', 'keyTradeoff')}:</b> {item.tradeoffs}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
 
       <section className="analysis-register"><RegisterHeading icon={ListChecks} title={t('ai', 'actionItems')} count={asArray(meeting.actionItems).length} /><div className="action-register"><header><span>{t('ai', 'action')}</span><span>{t('ai', 'owner')}</span><span>{t('ai', 'dueDate')}</span><span>{t('ai', 'dependency')}</span></header>{asArray(meeting.actionItems).map((item, index) => <article key={`${item.task}-${index}`}><strong>{item.task}{item.priority && <small> · {level(item.priority)}</small>}</strong><span>{item.owner || t('ai', 'unassigned')}</span><span>{item.dueDate || t('ai', 'noDueDate')}</span><span>{item.dependency || item.expectedOutcome || fallback}</span><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
 
       <section className="analysis-register"><RegisterHeading icon={MessageCircle} title={t('ai', 'proposals')} count={asArray(meeting.proposals).length} /><div className="proposal-register">{asArray(meeting.proposals).map((item, index) => <article key={`${item.proposal}-${index}`}><header><strong>{item.proposal}</strong><span>{level(item.status)}</span></header><p>{item.implication}</p>{item.proposedBy && <small>{item.proposedBy}</small>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'risksAndPending')} icon={AlertTriangle}>
+      <ReportSection title={t('ai', 'risksAndPending')} icon={AlertTriangle}>
       <div className="analysis-register-grid"><section className="analysis-register is-warning"><RegisterHeading icon={AlertTriangle} title={t('ai', 'risks')} count={asArray(meeting.risks).length} /><div className="register-rows">{asArray(meeting.risks).map((item, index) => <article key={`${item.risk}-${index}`}><header><strong>{item.risk}</strong><span className="semantic-label">{level(item.severity || item.likelihood || item.basis)}</span></header><p>{item.impact}</p>{item.trigger && <small>{item.trigger}</small>}{item.mitigation && <p className="next-question"><b>{t('ai', 'mitigation')}:</b> {item.mitigation}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section><section className="analysis-register"><RegisterHeading icon={Flag} title={t('ai', 'blockersAndDependencies')} count={asArray(meeting.blockers).length + asArray(meeting.dependencies).length} /><div className="register-rows">{asArray(meeting.blockers).map((item, index) => <article key={`${item.blocker}-${index}`}><strong>{item.blocker}</strong><p>{item.consequence}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}{asArray(meeting.dependencies).map((item, index) => <article key={`${item.dependency}-${index}`}><header><strong>{item.dependency}</strong><span className="semantic-label">{level(item.status)}</span></header>{item.owner && <p>{item.owner}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section></div>
       {!!asArray(meeting.openQuestions).length && <section className="analysis-register"><RegisterHeading icon={CircleHelp} title={t('ai', 'openQuestions')} count={asArray(meeting.openQuestions).length} /><div className="register-rows">{asArray(meeting.openQuestions).map((item, index) => <article key={`${item.question}-${index}`}><strong>{typeof item === 'string' ? item : item.question}</strong>{item.whyItMatters && <p>{item.whyItMatters}</p>}<Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
       {meeting.nextMeeting && <section className="next-meeting-card"><CalendarClock /><div><small>{t('ai', 'nextMeeting')}</small><strong>{sentence(meeting.nextMeeting.objective, fallback)}</strong><p>{meeting.nextMeeting.timing || meeting.nextMeeting.rationale}</p><InsightList items={asArray(meeting.nextMeeting.agenda)} empty={fallback} /></div></section>}
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'contextAndParticipants')} icon={Users}>
+      <ReportSection title={t('ai', 'contextAndParticipants')} icon={Users}>
       <ContextStrip items={[{ label: t('ai', 'purpose'), value: context.purpose }, { label: t('ai', 'participants'), value: context.participants }, { label: t('ai', 'topics'), value: context.topics }]} />
       <section className="manager-brief"><small>{t('ai', 'managerBrief')}</small><h4>{sentence(brief.bottomLine || brief.outcome, fallback)}</h4>{brief.bottomLine && <p>{brief.outcome}</p>}<div><div><b>{t('ai', 'whatChanged')}</b><InsightList items={asArray(brief.whatChanged)} empty={fallback} /></div><div><b>{t('ai', 'needsDecision')}</b><InsightList items={asArray(brief.needsDecision)} empty={fallback} /></div><div><b>{t('ai', 'needsEscalation')}</b><InsightList items={asArray(brief.needsEscalation)} empty={fallback} /></div><div><b>{t('ai', 'managementAttention')}</b><InsightList items={asArray(brief.managementAttention)} empty={fallback} /></div></div><Evidence items={brief.evidence} label={t('ai', 'showEvidence')} /></section>
       {!!participantViews.length && <section className="analysis-register"><RegisterHeading icon={Users} title={t('ai', 'participantViews')} count={participantViews.length} /><div className="participant-register">{participantViews.map((item, index) => <article key={`${item.speaker}-${index}`}><header><strong>{item.speaker}</strong></header><p>{item.position}</p><div><div><small>{t('ai', 'commitments')}</small><InsightList items={asArray(item.commitments)} empty={fallback} /></div><div><small>{t('ai', 'concerns')}</small><InsightList items={asArray(item.concerns)} empty={fallback} /></div></div><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
       {!!asArray(meeting.topics).length && <section className="analysis-register"><RegisterHeading icon={Layers3} title={t('ai', 'topics')} count={asArray(meeting.topics).length} /><div className="topic-register">{asArray(meeting.topics).map((item, index) => <article key={`${item.topic}-${index}`}><header><strong>{item.topic}</strong><span>{level(item.status)}</span></header><p>{item.summary}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>}
-      </ReportDisclosure>
+      </ReportSection>
 
-      <ReportDisclosure title={t('ai', 'metricsAndImplications')} icon={TrendingUp}>
+      <ReportSection title={t('ai', 'metricsAndImplications')} icon={TrendingUp}>
       <section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'metrics')} count={asArray(meeting.metrics).length} /><div className="metric-list">{asArray(meeting.metrics).map((item, index) => <article key={`${item.metric}-${index}`}><strong>{item.value}</strong><span>{item.metric}</span><p>{item.context}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section>
       {(!!asArray(meeting.tensions).length || !!asArray(meeting.strategicImplications).length) && <div className="analysis-register-grid"><section className="analysis-register is-warning"><RegisterHeading icon={Layers3} title={t('ai', 'tensions')} count={asArray(meeting.tensions).length} /><div className="register-rows">{asArray(meeting.tensions).map((item, index) => <article key={`${item.topic}-${index}`}><strong>{item.topic}</strong><InsightList items={asArray(item.positions)} empty={fallback} /><p>{item.implication}</p><p className="next-question">{item.resolutionNeeded}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section><section className="analysis-register"><RegisterHeading icon={TrendingUp} title={t('ai', 'strategicImplications')} count={asArray(meeting.strategicImplications).length} /><div className="register-rows">{asArray(meeting.strategicImplications).map((item, index) => <article key={`${item.implication}-${index}`}><header><strong>{item.implication}</strong><span className="semantic-label">{level(item.timeHorizon)}</span></header><p>{item.whyItMatters}</p><Evidence items={item.evidence} label={t('ai', 'showEvidence')} /></article>)}</div></section></div>}
-      </ReportDisclosure>
+      </ReportSection>
     </section>
   );
 }
@@ -482,22 +481,6 @@ export default function AIAnalysis({
     if (declared.length) return declared;
     return (['interview', 'language', 'meeting'] as AnalysisMode[]).filter((mode) => report?.[mode === 'language' ? 'languageClass' : mode]);
   }, [report]);
-  const [activeMode, setActiveMode] = useState<AnalysisMode>(modes[0] || 'language');
-  useEffect(() => { if (!modes.includes(activeMode)) setActiveMode(modes[0] || 'language'); }, [activeMode, modes]);
-  const selectModeFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const nextIndex = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? modes.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + modes.length) % modes.length;
-    const nextMode = modes[nextIndex];
-    if (!nextMode) return;
-    setActiveMode(nextMode);
-    document.getElementById(`${reportId}-tab-${nextMode}`)?.focus();
-  };
-
   if (!analysis) return <div className="analysis-empty">{t('ai', 'noData')}</div>;
   const quality = report.evidenceQuality || {};
   const summary = report.summary || {};
@@ -521,26 +504,12 @@ export default function AIAnalysis({
       </div>
 
       <section className="analysis-lens-workspace" id={`${reportId}-details`} tabIndex={-1} aria-labelledby={`${reportId}-details-title`}>
-        <header className="analysis-lens-header"><span>{t('ai', 'detailedAnalysis')}</span><h2 id={`${reportId}-details-title`}>{t('analysisModes', activeMode)}</h2></header>
-        <div className="analysis-lens-tabs" role="tablist" aria-label={t('ai', 'analysisLenses')}>{modes.map((mode, index) => <button type="button" role="tab" id={`${reportId}-tab-${mode}`} aria-controls={`${reportId}-panel`} aria-selected={activeMode === mode} tabIndex={activeMode === mode ? 0 : -1} key={mode} className={activeMode === mode ? 'is-active' : ''} onKeyDown={(event) => selectModeFromKeyboard(event, index)} onClick={() => setActiveMode(mode)}>{mode === 'interview' ? <BriefcaseBusiness aria-hidden="true" /> : mode === 'language' ? <BookOpen aria-hidden="true" /> : <Users aria-hidden="true" />}<span>{t('analysisModes', mode)}</span><small>{t('ai', `${mode}Lens`)}</small></button>)}</div>
-        <div className="analysis-lens-panel" id={`${reportId}-panel`} role="tabpanel" aria-labelledby={`${reportId}-tab-${activeMode}`} tabIndex={0}>
-          {activeMode === 'interview' && report.interview && <InterviewReport interview={report.interview} t={t} fallback={fallback} />}
-          {activeMode === 'language' && report.languageClass && (
-            <LanguageReport
-              languageClass={report.languageClass}
-              legacySpeakers={asArray(report.speakers)}
-              t={t}
-              fallback={fallback}
-              grammarAudioEnabled={grammarAudioEnabled}
-              transcriptSegments={transcriptSegments}
-              audioAvailable={audioAvailable}
-              activeAudioSegmentKey={activeAudioSegmentKey}
-              isAudioPlaying={isAudioPlaying}
-              onPlayAudioSegment={onPlayAudioSegment}
-              onPauseRecordingAudio={onPauseRecordingAudio}
-            />
-          )}
-          {activeMode === 'meeting' && report.meeting && <MeetingReport meeting={report.meeting} t={t} fallback={fallback} />}
+        <header className="analysis-lens-header"><span>{t('ai', 'analysisLenses')}</span><h2 id={`${reportId}-details-title`}>{t('ai', 'detailedAnalysis')}</h2></header>
+        <nav className="analysis-lens-index" aria-label={t('ai', 'analysisLenses')}>{modes.map((mode) => <button type="button" key={mode} onClick={() => focusReportTarget(`${reportId}-mode-${mode}`)}>{mode === 'interview' ? <BriefcaseBusiness aria-hidden="true" /> : mode === 'language' ? <BookOpen aria-hidden="true" /> : <Users aria-hidden="true" />}<span>{t('analysisModes', mode)}</span><small>{t('ai', `${mode}Lens`)}</small></button>)}</nav>
+        <div className="analysis-lens-sections">
+          {modes.includes('interview') && report.interview && <div className="analysis-lens-panel" id={`${reportId}-mode-interview`} tabIndex={-1}><InterviewReport interview={report.interview} t={t} fallback={fallback} /></div>}
+          {modes.includes('language') && report.languageClass && <div className="analysis-lens-panel" id={`${reportId}-mode-language`} tabIndex={-1}><LanguageReport languageClass={report.languageClass} legacySpeakers={asArray(report.speakers)} t={t} fallback={fallback} grammarAudioEnabled={grammarAudioEnabled} transcriptSegments={transcriptSegments} audioAvailable={audioAvailable} activeAudioSegmentKey={activeAudioSegmentKey} isAudioPlaying={isAudioPlaying} onPlayAudioSegment={onPlayAudioSegment} onPauseRecordingAudio={onPauseRecordingAudio} /></div>}
+          {modes.includes('meeting') && report.meeting && <div className="analysis-lens-panel" id={`${reportId}-mode-meeting`} tabIndex={-1}><MeetingReport meeting={report.meeting} t={t} fallback={fallback} /></div>}
         </div>
       </section>
 
