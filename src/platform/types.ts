@@ -93,6 +93,28 @@ export interface SaveRecordingInput {
   mimeType: string;
   extension: string;
   bytes: ArrayBuffer;
+  createdAt?: string;
+}
+
+export interface ImportRecordingInput {
+  name: string;
+  file: File;
+}
+
+export interface PendingRecording {
+  id: string;
+  name: string;
+  durationMs: number;
+  mode: string;
+  mimeType: string;
+  extension: string;
+  sizeBytes: number;
+  createdAt: string;
+  updatedAt: string;
+  state: 'protected' | 'uploading' | 'finalizing' | 'failed';
+  blob: Blob;
+  blobUrl?: string;
+  lastError?: string;
 }
 
 export interface AnalysisInput {
@@ -131,6 +153,7 @@ export interface VoxaPlatform {
   capabilities: PlatformCapabilities;
   listRecordings(): Promise<Recording[]>;
   saveRecording(input: SaveRecordingInput): Promise<Recording>;
+  importRecording(input: ImportRecordingInput): Promise<Recording>;
   importTranscript(input: { name: string; transcript: string }): Promise<Recording>;
   deleteRecording(id: string): Promise<void>;
   transcribe(input: TranscriptionInput): Promise<TranscriptResult>;
@@ -147,6 +170,11 @@ export interface VoxaPlatform {
   getBillingStatus(): Promise<BillingStatus>;
   createBillingPortalSession(): Promise<{ url: string | null }>;
   openBillingUrl(url: string): Promise<void>;
+  listPendingRecordings?(): Promise<PendingRecording[]>;
+  retryPendingRecording?(id: string): Promise<Recording>;
+  deletePendingRecording?(id: string): Promise<void>;
+  downloadPendingRecording?(id: string): Promise<void>;
+  subscribeToPendingRecordingsChanged?(callback: () => void): () => void;
   getShortcutSettings?(): Promise<{ record: string; options: string[] }>;
   setRecordShortcut?(shortcut: string): Promise<{ record: string; options: string[] }>;
   subscribeToShortcutRecord?(callback: () => void): () => void;

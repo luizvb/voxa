@@ -92,3 +92,56 @@ test('automatic and manual insights use the platform locale as output language',
   assert.match(backend, /OUTPUT LANGUAGE CONTRACT — MANDATORY/);
   assert.match(backend, /Evidence\.quote and correction\.original are the only language exceptions/);
 });
+
+test('completed audio is committed locally before auth or network upload', () => {
+  const platform = read('src/platform/web-platform.ts');
+  const recovery = read('src/lib/recording-recovery.ts');
+  const saveMethod = platform.slice(platform.indexOf('async saveRecording'), platform.indexOf('async importRecording'));
+
+  assert.ok(saveMethod.indexOf('await persistRecordingDraft') < saveMethod.indexOf('retryPendingRecording'));
+  assert.match(recovery, /const DATABASE_NAME = 'voxa-recording-recovery'/);
+  assert.match(recovery, /transaction\.oncomplete = \(\) =>/);
+  assert.match(recovery, /resolve\(result\)/);
+  assert.match(platform, /await deleteRecordingDraft\(id\)/);
+});
+
+test('recording retry reuses a stable owner-scoped Blob and preserves drafts on failure', () => {
+  const platform = read('src/platform/web-platform.ts');
+  const backend = read('backend/src/controllers/recordings.ts');
+
+  assert.match(platform, /recordings\/\$\{safePathSegment\(userId\)\}\/\$\{draft\.id\}\.\$\{draft\.extension\}/);
+  assert.match(platform, /blobUrl: uploaded\.url, state: 'finalizing'/);
+  assert.match(platform, /state: 'failed', lastError: message/);
+  assert.match(backend, /allowOverwrite: ownerScoped/);
+  assert.match(backend, /recordingBlobPathMatchesUser/);
+  assert.match(backend, /cleanupServerUploadedBlob && uploadedBlobUrl/);
+});
+
+test('downloaded WebM audio can be imported through the protected local-first pipeline', () => {
+  const app = read('src/App.tsx');
+  const dialog = read('src/components/AudioImportDialog.tsx');
+  const platform = read('src/platform/web-platform.ts');
+  const importMethod = platform.slice(platform.indexOf('async importRecording'), platform.indexOf('async listPendingRecordings'));
+
+  assert.match(app, /<AudioImportDialog/);
+  assert.match(dialog, /accept="\.webm,audio\/webm,video\/webm"/);
+  assert.match(dialog, /platform\.importRecording/);
+  assert.ok(importMethod.indexOf('await persistRecordingBlobDraft') < importMethod.indexOf('return this.retryPendingRecording(id)'));
+});
+
+test('transient auth failures retry without putting protected audio at risk', () => {
+  const auth = read('src/platform/auth-token.ts');
+
+  assert.match(auth, /SESSION_RETRY_DELAYS_MS = \[300, 900\]/);
+  assert.match(auth, /isTransientSessionError/);
+  assert.match(auth, /Your audio remains protected locally/);
+});
+
+test('local recovery remains reachable when auth cannot restore the session after reload', () => {
+  const app = read('src/App.tsx');
+
+  assert.match(app, /localRecoveryState/);
+  assert.match(app, /platform\.listPendingRecordings/);
+  assert.match(app, /subscribeToPendingRecordingsChanged/);
+  assert.match(app, /!isAuthenticated && !isElectronApp && localRecoveryState === 'empty'/);
+});

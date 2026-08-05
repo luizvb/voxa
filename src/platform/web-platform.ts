@@ -1,6 +1,20 @@
 import { upload } from '@vercel/blob/client';
 import { getAuthCredentials, getAuthToken } from './auth-token';
-import type { AnalysisInput, AnalysisSummary, BillingStatus, PronunciationAssessment, PronunciationAssessmentInput, Recording, RecordingMediaSource, RenameTranscriptSpeakersInput, SaveRecordingInput, TranscriptResult, TranscriptionInput, VoxaPlatform } from './types';
+import {
+  deleteRecordingDraft,
+  downloadRecordingDraft,
+  getRecordingDraft,
+  isSupportedRecordingFile,
+  listRecordingDrafts,
+  MAX_RECORDING_FILE_BYTES,
+  persistRecordingBlobDraft,
+  persistRecordingDraft,
+  putRecordingDraft,
+  readRecordingDurationMs,
+  subscribeToRecordingRecovery,
+  updateRecordingDraft,
+} from '../lib/recording-recovery';
+import type { AnalysisInput, AnalysisSummary, BillingStatus, ImportRecordingInput, PendingRecording, PronunciationAssessment, PronunciationAssessmentInput, Recording, RecordingMediaSource, RenameTranscriptSpeakersInput, SaveRecordingInput, TranscriptResult, TranscriptionInput, VoxaPlatform } from './types';
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
@@ -26,6 +40,32 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.status === 204 ? undefined as T : response.json();
 }
 
+function safePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128) || 'local-user';
+}
+
+async function recordingRequestWithToken(token: string, input: PendingRecording): Promise<Recording> {
+  const response = await fetch(apiUrl('/api/recordings'), {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      id: input.id,
+      name: input.name,
+      durationMs: input.durationMs,
+      mode: input.mode,
+      mimeType: input.mimeType,
+      extension: input.extension,
+      createdAt: input.createdAt,
+      blobUrl: input.blobUrl,
+      sizeBytes: input.sizeBytes,
+    }),
+  });
+  if (response.status === 401) throw new Error('Your session has expired. Please sign in again.');
+  if (!response.ok) throw new Error((await response.text()) || `Request failed (${response.status})`);
+  return response.json() as Promise<Recording>;
+}
+
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 export class WebPlatform implements VoxaPlatform {
@@ -38,18 +78,74 @@ export class WebPlatform implements VoxaPlatform {
   listRecordings() { return request<Recording[]>('/api/recordings'); }
 
   async saveRecording(input: SaveRecordingInput) {
-    const { authToken: token } = await getAuthCredentials();
     const id = input.id || crypto.randomUUID();
-    const pathname = `recordings/${id}.${input.extension}`;
-    const blob = await upload(pathname, new Blob([input.bytes], { type: input.mimeType }), {
-      access: 'public', multipart: true, handleUploadUrl: apiUrl('/api/recordings/upload'),
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return request<Recording>('/api/recordings', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...input, bytes: undefined, id, blobUrl: blob.url, sizeBytes: input.bytes.byteLength }),
-    });
+    await persistRecordingDraft({ ...input, id });
+    return this.retryPendingRecording(id);
   }
+
+  async importRecording(input: ImportRecordingInput) {
+    if (!isSupportedRecordingFile(input.file)) {
+      if (input.file.size > MAX_RECORDING_FILE_BYTES) throw new Error('The selected WebM is larger than 1 GB.');
+      throw new Error('Choose a non-empty WebM audio file.');
+    }
+    const id = crypto.randomUUID();
+    const durationMs = await readRecordingDurationMs(input.file);
+    await persistRecordingBlobDraft({
+      id,
+      name: input.name.trim() || input.file.name.replace(/\.webm$/i, ''),
+      durationMs,
+      mode: 'audio-import',
+      mimeType: input.file.type || 'audio/webm',
+      extension: 'webm',
+      createdAt: new Date().toISOString(),
+    }, input.file);
+    return this.retryPendingRecording(id);
+  }
+
+  async listPendingRecordings() {
+    return listRecordingDrafts();
+  }
+
+  async retryPendingRecording(id: string) {
+    let draft = await getRecordingDraft(id);
+    if (!draft) throw new Error('The protected local recording is no longer available.');
+    try {
+      draft = await updateRecordingDraft(id, { state: 'uploading', lastError: undefined });
+      const { authToken: token, userId } = await getAuthCredentials();
+      if (!draft.blobUrl) {
+        const pathname = `recordings/${safePathSegment(userId)}/${draft.id}.${draft.extension}`;
+        const uploaded = await upload(pathname, draft.blob, {
+          access: 'public',
+          multipart: true,
+          handleUploadUrl: apiUrl('/api/recordings/upload'),
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        draft = await updateRecordingDraft(id, { blobUrl: uploaded.url, state: 'finalizing' });
+      } else if (draft.state !== 'finalizing') {
+        draft = await updateRecordingDraft(id, { state: 'finalizing' });
+      }
+      const recording = await recordingRequestWithToken(token, draft);
+      await deleteRecordingDraft(id);
+      return recording;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const current = await getRecordingDraft(id).catch(() => null);
+      if (current) await putRecordingDraft({ ...current, state: 'failed', lastError: message }).catch(() => {});
+      throw error;
+    }
+  }
+
+  async deletePendingRecording(id: string) {
+    await deleteRecordingDraft(id);
+  }
+
+  async downloadPendingRecording(id: string) {
+    const draft = await getRecordingDraft(id);
+    if (!draft) throw new Error('The protected local recording is no longer available.');
+    downloadRecordingDraft(draft);
+  }
+
+  subscribeToPendingRecordingsChanged(callback: () => void) { return subscribeToRecordingRecovery(callback); }
 
   importTranscript(input: { name: string; transcript: string }) {
     return request<Recording>('/api/recordings/import-transcript', {

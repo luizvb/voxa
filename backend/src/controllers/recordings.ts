@@ -21,6 +21,26 @@ function safePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128) || 'local-user';
 }
 
+const recordingIdPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const recordingFilePattern = `${recordingIdPattern}\\.(webm|audio)`;
+
+export function isOwnerScopedRecordingPath(pathname: string, userId: string): boolean {
+  const normalized = pathname.replace(/^\//, '');
+  const owner = safePathSegment(userId);
+  return new RegExp(`^recordings/${owner}/${recordingFilePattern}$`, 'i').test(normalized);
+}
+
+export function recordingBlobPathMatchesUser(blobUrl: string, sessionId: string, userId: string): boolean {
+  if (!isRecordingBlobUrl(blobUrl)) return false;
+  const pathname = new URL(blobUrl).pathname.replace(/^\/+/, '');
+  const recordingId = safePathSegment(sessionId);
+  const owner = safePathSegment(userId);
+  return ['webm', 'audio'].some((extension) => (
+    pathname === `recordings/${owner}/${recordingId}.${extension}`
+    || pathname === `recordings/${recordingId}.${extension}`
+  ));
+}
+
 function isRecordingBlobUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
@@ -40,7 +60,9 @@ export const createRecordingUploadToken = async (req: Request, res: Response): P
       request: req,
       body: req.body as HandleUploadBody,
       onBeforeGenerateToken: async (pathname) => {
-        if (!/^recordings\/[0-9a-f-]{36}\.(webm|audio)$/i.test(pathname)) {
+        const ownerScoped = isOwnerScopedRecordingPath(pathname, userId);
+        const legacyPath = new RegExp(`^recordings/${recordingFilePattern}$`, 'i').test(pathname.replace(/^\//, ''));
+        if (!ownerScoped && !legacyPath) {
           throw new Error('Invalid recording upload path.');
         }
 
@@ -48,7 +70,7 @@ export const createRecordingUploadToken = async (req: Request, res: Response): P
           allowedContentTypes: ['audio/*', 'video/webm'],
           maximumSizeInBytes: 1024 * 1024 * 1024,
           addRandomSuffix: false,
-          allowOverwrite: false,
+          allowOverwrite: ownerScoped,
           cacheControlMaxAge: 60
         };
       }
@@ -63,6 +85,7 @@ export const createRecordingUploadToken = async (req: Request, res: Response): P
 
 export const uploadRecording = async (req: Request, res: Response): Promise<void> => {
   let uploadedBlobUrl: string | null = null;
+  let cleanupServerUploadedBlob = false;
   try {
     const userId = req.user!.id;
     await ensureUser(userId, req.user?.email);
@@ -75,17 +98,9 @@ export const uploadRecording = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    if (blobUrl && !isRecordingBlobUrl(blobUrl)) {
+    if (blobUrl && !recordingBlobPathMatchesUser(blobUrl, sessionId, userId)) {
       res.status(400).json({ error: 'Invalid recording Blob URL.' });
       return;
-    }
-
-    if (blobUrl) {
-      const pathname = new URL(blobUrl).pathname;
-      if (!pathname.startsWith(`/recordings/${safePathSegment(sessionId)}.`)) {
-        res.status(400).json({ error: 'Blob path does not match the recording ID.' });
-        return;
-      }
     }
 
     if (req.file) {
@@ -101,6 +116,7 @@ export const uploadRecording = async (req: Request, res: Response): Promise<void
         }
       );
       uploadedBlobUrl = blob.url;
+      cleanupServerUploadedBlob = true;
     } else {
       uploadedBlobUrl = blobUrl;
     }
@@ -138,7 +154,7 @@ export const uploadRecording = async (req: Request, res: Response): Promise<void
     });
   } catch (error: any) {
     console.error('Error saving recording:', error);
-    if (uploadedBlobUrl && isRecordingBlobUrl(uploadedBlobUrl)) {
+    if (cleanupServerUploadedBlob && uploadedBlobUrl && isRecordingBlobUrl(uploadedBlobUrl)) {
       await del(uploadedBlobUrl).catch((cleanupError) => {
         console.error('Error cleaning up orphaned recording Blob:', cleanupError);
       });

@@ -1,5 +1,18 @@
 import { getAuthCredentials } from './auth-token';
-import type { AnalysisInput, PronunciationAssessmentInput, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
+import {
+  deleteRecordingDraft,
+  downloadRecordingDraft,
+  getRecordingDraft,
+  isSupportedRecordingFile,
+  listRecordingDrafts,
+  MAX_RECORDING_FILE_BYTES,
+  persistRecordingBlobDraft,
+  persistRecordingDraft,
+  putRecordingDraft,
+  readRecordingDurationMs,
+  subscribeToRecordingRecovery,
+} from '../lib/recording-recovery';
+import type { AnalysisInput, ImportRecordingInput, PronunciationAssessmentInput, Recording, RecordingMediaSource, SaveRecordingInput, TranscriptionInput, VoxaPlatform } from './types';
 
 export class ElectronPlatform implements VoxaPlatform {
   capabilities = { kind: 'electron' as const, systemAudio: true, globalShortcuts: true, widget: true, localFolder: true, nativePdf: true };
@@ -7,7 +20,63 @@ export class ElectronPlatform implements VoxaPlatform {
   private auth() { return getAuthCredentials(); }
 
   async listRecordings() { return window.recorder.listRecordings(await this.auth()); }
-  async saveRecording(input: SaveRecordingInput) { return window.recorder.saveRecording({ ...input, ...(await this.auth()) }); }
+  async saveRecording(input: SaveRecordingInput) {
+    const id = input.id || crypto.randomUUID();
+    await persistRecordingDraft({ ...input, id });
+    return this.retryPendingRecording(id);
+  }
+  async importRecording(input: ImportRecordingInput) {
+    if (!isSupportedRecordingFile(input.file)) {
+      if (input.file.size > MAX_RECORDING_FILE_BYTES) throw new Error('The selected WebM is larger than 1 GB.');
+      throw new Error('Choose a non-empty WebM audio file.');
+    }
+    const id = crypto.randomUUID();
+    const durationMs = await readRecordingDurationMs(input.file);
+    await persistRecordingBlobDraft({
+      id,
+      name: input.name.trim() || input.file.name.replace(/\.webm$/i, ''),
+      durationMs,
+      mode: 'audio-import',
+      mimeType: input.file.type || 'audio/webm',
+      extension: 'webm',
+      createdAt: new Date().toISOString(),
+    }, input.file);
+    return this.retryPendingRecording(id);
+  }
+  async listPendingRecordings() { return listRecordingDrafts(); }
+  async retryPendingRecording(id: string) {
+    const draft = await getRecordingDraft(id);
+    if (!draft) throw new Error('The protected local recording is no longer available.');
+    try {
+      await putRecordingDraft({ ...draft, state: 'uploading', lastError: undefined });
+      const bytes = await draft.blob.arrayBuffer();
+      const recording = await window.recorder.saveRecording({
+        id: draft.id,
+        name: draft.name,
+        durationMs: draft.durationMs,
+        mode: draft.mode,
+        mimeType: draft.mimeType,
+        extension: draft.extension,
+        createdAt: draft.createdAt,
+        bytes,
+        ...(await this.auth()),
+      });
+      await deleteRecordingDraft(id);
+      return recording;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const current = await getRecordingDraft(id).catch(() => null);
+      if (current) await putRecordingDraft({ ...current, state: 'failed', lastError: message }).catch(() => {});
+      throw error;
+    }
+  }
+  async deletePendingRecording(id: string) { await deleteRecordingDraft(id); }
+  async downloadPendingRecording(id: string) {
+    const draft = await getRecordingDraft(id);
+    if (!draft) throw new Error('The protected local recording is no longer available.');
+    downloadRecordingDraft(draft);
+  }
+  subscribeToPendingRecordingsChanged(callback: () => void) { return subscribeToRecordingRecovery(callback); }
   async importTranscript(input: { name: string; transcript: string }) { return window.recorder.importTranscript({ ...input, ...(await this.auth()) }); }
   async deleteRecording(id: string) { await window.recorder.deleteRecording(id, await this.auth()); }
   async loadRecordingMedia(recording: Recording): Promise<RecordingMediaSource> {

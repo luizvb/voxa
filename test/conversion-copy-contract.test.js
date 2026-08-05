@@ -34,9 +34,9 @@ test('web capture and storage claims match the implemented capability and upload
   assert.match(webPlatform, /await upload\(/);
   assert.match(dashboard, /kind === 'web' \? 'cloudAfterStop' : 'localFirst'/);
   assert.match(onboarding, /kind === 'web' \? 'recordDescWeb' : 'recordDesc'/);
-  assert.match(locales, /Uploaded after you stop/);
-  assert.match(locales, /Enviado após encerrar a gravação/);
-  assert.match(locales, /Se sube al detener la grabación/);
+  assert.match(locales, /Protected locally, then uploaded/);
+  assert.match(locales, /Protegido localmente e depois enviado/);
+  assert.match(locales, /Protegido localmente y luego subido/);
   assert.match(locales, /audio from a tab or screen you choose to share/);
   assert.match(locales, /áudio de uma aba ou tela que você escolher compartilhar/);
   assert.match(locales, /audio de una pestaña o pantalla que elijas compartir/);

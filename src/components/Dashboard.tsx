@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AudioLines,
   Check,
   ChevronDown,
   Clock3,
+  Download,
   FileAudio,
   FileText,
   Keyboard,
@@ -15,13 +16,17 @@ import {
   RefreshCw,
   ScreenShare,
   Settings2,
+  ShieldCheck,
   Square,
+  Trash2,
+  UploadCloud,
 } from 'lucide-react';
 import type { LibraryStatus } from '../App';
-import { platform, type Recording, type TranscriptionLanguage } from '../platform';
+import { platform, type PendingRecording, type Recording, type TranscriptionLanguage } from '../platform';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../hooks/useAuth';
 import { useRecorder } from '../hooks/useRecorder';
+import { safeRecordingFileName } from '../lib/recording-recovery';
 import { getSavedTranscriptionLanguage, saveTranscriptionLanguage, TRANSCRIPTION_LANGUAGES } from '../lib/transcription-language';
 
 interface DashboardProps {
@@ -32,6 +37,7 @@ interface DashboardProps {
   onSelectRecording: (id: string) => void;
   onRecordingComplete: (id: string) => void;
   onImportTranscript: () => void;
+  onImportAudio: () => void;
 }
 
 type ShortcutSettings = { record: string; options: string[] };
@@ -56,6 +62,7 @@ export default function Dashboard({
   onSelectRecording,
   onRecordingComplete,
   onImportTranscript,
+  onImportAudio,
 }: DashboardProps) {
   const { t, language } = useLanguage();
   const { user, isAuthenticated } = useAuth();
@@ -71,6 +78,8 @@ export default function Dashboard({
     pauseRecording,
     resumeRecording,
     stopRecording,
+    emergencyRecording,
+    retryEmergencyRecording,
   } = useRecorder();
 
   const [shortcutSettings, setShortcutSettings] = useState<ShortcutSettings>({
@@ -81,6 +90,50 @@ export default function Dashboard({
   const [shortcutStatus, setShortcutStatus] = useState('');
   const [micStatus, setMicStatus] = useState('');
   const [transcriptionLanguage, setTranscriptionLanguage] = useState<TranscriptionLanguage>(() => getSavedTranscriptionLanguage(language));
+  const [pendingRecordings, setPendingRecordings] = useState<PendingRecording[]>([]);
+  const [recoveryBusyId, setRecoveryBusyId] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState('');
+  const initialRecoveryAttemptedRef = useRef(false);
+
+  const refreshPendingRecordings = useCallback(async () => {
+    const items = platform.listPendingRecordings ? await platform.listPendingRecordings() : [];
+    setPendingRecordings(items);
+    return items;
+  }, []);
+
+  const resumeProtectedRecordings = useCallback(async (items: PendingRecording[]) => {
+    if (!platform.retryPendingRecording || !navigator.onLine) return;
+    for (const item of items) {
+      setRecoveryBusyId(item.id);
+      try {
+        await platform.retryPendingRecording(item.id);
+        await onRetry();
+      } catch {
+        // The draft remains local and actionable.
+      }
+    }
+    setRecoveryBusyId('');
+    await refreshPendingRecordings();
+  }, [onRetry, refreshPendingRecordings]);
+
+  useEffect(() => {
+    let active = true;
+    void refreshPendingRecordings().then((items) => {
+      if (!active || initialRecoveryAttemptedRef.current || !items.length) return;
+      initialRecoveryAttemptedRef.current = true;
+      void resumeProtectedRecordings(items);
+    }).catch(() => {});
+    const unsubscribe = platform.subscribeToPendingRecordingsChanged?.(() => {
+      if (active) void refreshPendingRecordings();
+    });
+    const handleOnline = () => { void refreshPendingRecordings().then(resumeProtectedRecordings); };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      active = false;
+      unsubscribe?.();
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [refreshPendingRecordings, resumeProtectedRecordings]);
 
   const currentShortcut = shortcutLabels[shortcutSettings.record] || shortcutSettings.record;
   const firstName = (user?.name || user?.email?.split('@')[0] || '').trim().split(/\s+/)[0];
@@ -169,8 +222,34 @@ export default function Dashboard({
       if (saved?.id) onRecordingComplete(saved.id);
     } catch (error) {
       console.error(error);
+      await refreshPendingRecordings().catch(() => {});
     }
   };
+
+  const handleRetryPending = async (id: string) => {
+    if (!platform.retryPendingRecording) return;
+    setRecoveryBusyId(id);
+    setRecoveryStatus('');
+    try {
+      const saved = await platform.retryPendingRecording(id);
+      await refreshPendingRecordings();
+      onRecordingComplete(saved.id);
+    } catch (error: any) {
+      setRecoveryStatus(error?.message || t('recovery', 'retryFailed'));
+      await refreshPendingRecordings().catch(() => {});
+    } finally {
+      setRecoveryBusyId('');
+    }
+  };
+
+  const handleDeletePending = async (id: string) => {
+    if (!platform.deletePendingRecording || !window.confirm(t('recovery', 'deleteConfirm'))) return;
+    await platform.deletePendingRecording(id);
+    await refreshPendingRecordings();
+  };
+
+  const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  const emergencyNeedsSeparateCard = emergencyRecording && !pendingRecordings.some((item) => item.id === emergencyRecording.id);
 
   return (
     <main className="workspace-view">
@@ -226,6 +305,60 @@ export default function Dashboard({
         </div>
       </section>
 
+      {(pendingRecordings.length > 0 || emergencyNeedsSeparateCard) && (
+        <section className="recovery-panel" aria-labelledby="recording-recovery-title" aria-live="polite">
+          <header>
+            <span className="recovery-icon"><ShieldCheck /></span>
+            <div>
+              <h3 id="recording-recovery-title">{t('recovery', 'title')}</h3>
+              <p>{t('recovery', 'description')}</p>
+            </div>
+          </header>
+          <div className="recovery-list">
+            {pendingRecordings.map((item) => (
+              <article className="recovery-item" key={item.id}>
+                <div className="recovery-copy">
+                  <strong>{item.name}</strong>
+                  <small>{formatDuration(item.durationMs)} · {formatSize(item.sizeBytes)}</small>
+                  <span className={item.state === 'failed' ? 'recovery-state is-error' : item.state === 'uploading' ? 'recovery-state is-uploading' : item.state === 'finalizing' ? 'recovery-state is-finalizing' : 'recovery-state'}>
+                    {recoveryBusyId === item.id ? t('recovery', 'uploading') : item.state === 'failed' ? t('recovery', 'needsAttention') : item.state === 'finalizing' ? t('recovery', 'finalizing') : t('recovery', 'protected')}
+                  </span>
+                  {item.lastError && <p className="recovery-error">{t('recovery', 'failureDetail')}</p>}
+                </div>
+                <div className="recovery-actions">
+                  <button type="button" className="button button-primary" onClick={() => void handleRetryPending(item.id)} disabled={Boolean(recoveryBusyId)}><UploadCloud />{t('recovery', 'retryUpload')}</button>
+                  <button type="button" className="button button-secondary" onClick={() => void platform.downloadPendingRecording?.(item.id)} disabled={recoveryBusyId === item.id}><Download />{t('recovery', 'downloadCopy')}</button>
+                  <button type="button" className="icon-button recovery-delete" onClick={() => void handleDeletePending(item.id)} disabled={Boolean(recoveryBusyId)} aria-label={t('recovery', 'deleteLocal')} title={t('recovery', 'deleteLocal')}><Trash2 /></button>
+                </div>
+              </article>
+            ))}
+            {emergencyNeedsSeparateCard && emergencyRecording && (
+              <article className="recovery-item is-emergency">
+                <div className="recovery-copy">
+                  <strong>{emergencyRecording.name}</strong>
+                  <small>{formatDuration(emergencyRecording.durationMs)} · {formatSize(emergencyRecording.blob.size)}</small>
+                  <span className="recovery-state is-error">{t('recovery', 'memoryOnly')}</span>
+                  <p className="recovery-error">{t('recovery', 'failureDetail')}</p>
+                </div>
+                <div className="recovery-actions">
+                  <button type="button" className="button button-primary" onClick={async () => {
+                    setRecoveryStatus('');
+                    try {
+                      const saved = await retryEmergencyRecording();
+                      if (saved?.id) onRecordingComplete(saved.id);
+                    } catch (error: any) {
+                      setRecoveryStatus(error?.message || t('recovery', 'retryFailed'));
+                    }
+                  }} disabled={Boolean(recoveryBusyId)}><UploadCloud />{t('recovery', 'retryUpload')}</button>
+                  <a className="button button-secondary" href={emergencyRecording.url} download={`${safeRecordingFileName(emergencyRecording.name)}.webm`}><Download />{t('recovery', 'downloadCopy')}</a>
+                </div>
+              </article>
+            )}
+          </div>
+          {recoveryStatus && <p className="recovery-error" role="alert">{recoveryStatus}</p>}
+        </section>
+      )}
+
       <section className={phase === 'recording' ? 'recorder-card is-live' : phase === 'error' ? 'recorder-card is-error' : 'recorder-card'}>
         <div className="recorder-main">
           <div className="recorder-meta">
@@ -258,7 +391,7 @@ export default function Dashboard({
 
           <p className="recorder-description">
             {phase === 'error'
-              ? status
+              ? pendingRecordings.length || emergencyRecording ? t('recovery', 'failureDetail') : status
               : isRecording
                 ? captureMode === 'shared' ? t('recorder', 'recordingDescriptionShared') : t('recorder', 'recordingDescriptionMicrophone')
                 : platform.capabilities.kind === 'web' ? t('recorder', 'idleDescriptionWeb') : t('recorder', 'idleDescription')}
@@ -283,6 +416,10 @@ export default function Dashboard({
               >
                 <span className="capture-choice-icon"><ScreenShare /></span>
                 <span><strong>{t('recorder', 'shareTabOrScreen')}</strong><small>{t('recorder', 'shareTabOrScreenDescription')}</small></span>
+              </button>
+              <button type="button" className="capture-choice capture-choice-import" onClick={onImportAudio}>
+                <span className="capture-choice-icon"><FileAudio /></span>
+                <span><strong>{t('history', 'importAudio')}</strong><small>{t('history', 'importAudioShortDescription')}</small></span>
               </button>
             </div>
           ) : (

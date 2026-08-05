@@ -9,6 +9,18 @@ declare global {
 
 export type CaptureMode = 'microphone' | 'shared';
 
+export interface EmergencyRecording {
+  id: string;
+  name: string;
+  durationMs: number;
+  mode: string;
+  mimeType: string;
+  extension: string;
+  blob: Blob;
+  url: string;
+  error: string;
+}
+
 type DisplayCaptureOptions = DisplayMediaStreamOptions & {
   preferCurrentTab?: boolean;
   selfBrowserSurface?: 'include' | 'exclude';
@@ -22,6 +34,7 @@ export function useRecorder() {
   const [isPaused, setIsPaused] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewBlob, setReviewBlob] = useState<{ blob: Blob; durationMs: number; url: string } | null>(null);
+  const [emergencyRecording, setEmergencyRecording] = useState<EmergencyRecording | null>(null);
   
   const [status, setStatus] = useState('Ready');
   const [sessionName, setSessionName] = useState('');
@@ -36,6 +49,8 @@ export function useRecorder() {
   const streamsRef = useRef<MediaStream[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const activeCaptureModeRef = useRef<CaptureMode>(captureMode);
+  const reviewBlobRef = useRef<typeof reviewBlob>(null);
+  const emergencyRecordingRef = useRef<typeof emergencyRecording>(null);
   
   // Time tracking
   const startedAtRef = useRef<number>(0);
@@ -243,13 +258,17 @@ export function useRecorder() {
         }
         
         // Default: save immediately
-        setStatus('Saving...');
+        setStatus('Protecting local copy...');
+        const id = crypto.randomUUID();
+        const recordingName = sessionName || 'Untitled recording';
+        const recordingMode = activeCaptureModeRef.current === 'shared' ? 'shared' : 'mic';
         try {
           const bytes = await blob.arrayBuffer();
           const saved = await platform.saveRecording({
-            name: sessionName || 'Untitled recording',
+            id,
+            name: recordingName,
             durationMs,
-            mode: activeCaptureModeRef.current === 'shared' ? 'shared' : 'mic',
+            mode: recordingMode,
             mimeType: blob.type || 'audio/webm',
             extension: 'webm',
             bytes
@@ -257,6 +276,21 @@ export function useRecorder() {
           setStatus('Saved');
           resolve(saved);
         } catch (error: any) {
+          const url = URL.createObjectURL(blob);
+          setEmergencyRecording((current) => {
+            if (current?.url) URL.revokeObjectURL(current.url);
+            return {
+              id,
+              name: recordingName,
+              durationMs,
+              mode: recordingMode,
+              mimeType: blob.type || 'audio/webm',
+              extension: 'webm',
+              blob,
+              url,
+              error: error?.message || 'The upload could not be completed.',
+            };
+          });
           setStatus(`Save failed: ${error.message}`);
           reject(error);
         }
@@ -265,6 +299,35 @@ export function useRecorder() {
       mediaRecorderRef.current.stop();
     });
   }, [sessionName, isPaused]);
+
+  const retryEmergencyRecording = useCallback(async () => {
+    if (!emergencyRecording) return undefined;
+    setStatus('Retrying protected recording...');
+    try {
+      const saved = await platform.saveRecording({
+        id: emergencyRecording.id,
+        name: emergencyRecording.name,
+        durationMs: emergencyRecording.durationMs,
+        mode: emergencyRecording.mode,
+        mimeType: emergencyRecording.mimeType,
+        extension: emergencyRecording.extension,
+        bytes: await emergencyRecording.blob.arrayBuffer(),
+      });
+      URL.revokeObjectURL(emergencyRecording.url);
+      setEmergencyRecording(null);
+      setStatus('Saved');
+      return saved;
+    } catch (error: any) {
+      setEmergencyRecording((current) => current ? { ...current, error: error?.message || current.error } : current);
+      setStatus(`Save failed: ${error?.message || 'The upload could not be completed.'}`);
+      throw error;
+    }
+  }, [emergencyRecording]);
+
+  const dismissEmergencyRecording = useCallback(() => {
+    if (emergencyRecording?.url) URL.revokeObjectURL(emergencyRecording.url);
+    setEmergencyRecording(null);
+  }, [emergencyRecording]);
 
   const saveReview = useCallback(async () => {
     if (!reviewBlob) return;
@@ -297,22 +360,34 @@ export function useRecorder() {
     setStatus('Discarded');
   }, [reviewBlob]);
 
-  // Cleanup on unmount
+  useEffect(() => {
+    reviewBlobRef.current = reviewBlob;
+  }, [reviewBlob]);
+
+  useEffect(() => {
+    emergencyRecordingRef.current = emergencyRecording;
+  }, [emergencyRecording]);
+
+  // Cleanup object URLs only when the recorder surface actually unmounts.
   useEffect(() => {
     return () => {
       stopTimer();
       stopStreams();
-      if (reviewBlob && reviewBlob.url) {
-        URL.revokeObjectURL(reviewBlob.url);
+      if (reviewBlobRef.current?.url) {
+        URL.revokeObjectURL(reviewBlobRef.current.url);
+      }
+      if (emergencyRecordingRef.current?.url) {
+        URL.revokeObjectURL(emergencyRecordingRef.current.url);
       }
     };
-  }, [reviewBlob]);
+  }, []);
 
   return {
     isRecording,
     isPaused,
     isReviewing,
     reviewBlob,
+    emergencyRecording,
     status,
     captureMode,
     sessionName,
@@ -323,6 +398,8 @@ export function useRecorder() {
     pauseRecording,
     resumeRecording,
     stopRecording,
+    retryEmergencyRecording,
+    dismissEmergencyRecording,
     saveReview,
     discardReview
   };

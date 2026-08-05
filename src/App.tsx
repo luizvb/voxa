@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowUpRight, FilePlus2, LockKeyhole, Plus, X } from 'lucide-react';
+import { ArrowUpRight, FileAudio, FilePlus2, LockKeyhole, Plus, X } from 'lucide-react';
+import AudioImportDialog from './components/AudioImportDialog';
 import ComponentsShowcase from './components/ComponentsShowcase';
 import Dashboard from './components/Dashboard';
 import ExtensionAuth from './components/ExtensionAuth';
@@ -38,9 +39,11 @@ export default function App() {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [autoProcessRecordingId, setAutoProcessRecordingId] = useState<string | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isAudioImportDialogOpen, setIsAudioImportDialogOpen] = useState(false);
   const [showContentPaywall, setShowContentPaywall] = useState(false);
   const [billingGate, setBillingGate] = useState<'checking' | 'open' | 'locked'>('checking');
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [localRecoveryState, setLocalRecoveryState] = useState<'checking' | 'present' | 'empty'>('checking');
 
   const isElectronApp = platform.capabilities.kind === 'electron';
   const isUiPreview = import.meta.env.DEV && window.location.hash === '#/ui';
@@ -78,6 +81,24 @@ export default function App() {
     setAutoProcessRecordingId(autoProcess && id ? id : null);
     setActiveView('library');
   }, [billingGate]);
+
+  useEffect(() => {
+    let active = true;
+    const syncLocalRecovery = async () => {
+      try {
+        const pending = platform.listPendingRecordings ? await platform.listPendingRecordings() : [];
+        if (active) setLocalRecoveryState(pending.length ? 'present' : 'empty');
+      } catch {
+        if (active) setLocalRecoveryState('empty');
+      }
+    };
+    void syncLocalRecovery();
+    const unsubscribe = platform.subscribeToPendingRecordingsChanged?.(() => { void syncLocalRecovery(); });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     setIsWidget(window.location.hash === '#/widget');
@@ -177,6 +198,10 @@ export default function App() {
   };
 
   const handleEscape = useCallback(() => {
+    if (isAudioImportDialogOpen) {
+      setIsAudioImportDialogOpen(false);
+      return;
+    }
     if (isImportDialogOpen) {
       setIsImportDialogOpen(false);
       return;
@@ -190,7 +215,7 @@ export default function App() {
       return;
     }
     if (selectedRecordingId) setSelectedRecordingId(null);
-  }, [isImportDialogOpen, selectedRecordingId, showContentPaywall, showLoginModal]);
+  }, [isAudioImportDialogOpen, isImportDialogOpen, selectedRecordingId, showContentPaywall, showLoginModal]);
 
   useKeyboardActions({ enabled: isElectronApp && !isWidget, onEscape: handleEscape });
 
@@ -214,7 +239,11 @@ export default function App() {
     return <div className="app-loading drag-region"><div className="app-loading-mark" aria-hidden>V</div><span>{t('common', 'loading')}</span></div>;
   }
 
-  if (!isAuthenticated && !isElectronApp) {
+  if (!isAuthenticated && !isElectronApp && localRecoveryState === 'checking') {
+    return <div className="app-loading drag-region"><div className="app-loading-mark" aria-hidden>V</div><span>{t('common', 'loading')}</span></div>;
+  }
+
+  if (!isAuthenticated && !isElectronApp && localRecoveryState === 'empty') {
     return (
       <LandingPage
         loginContext={loginContext}
@@ -292,6 +321,15 @@ export default function App() {
         {showOnboarding && <Onboarding onComplete={completeOnboarding} />}
       </AnimatePresence>
 
+      <AudioImportDialog
+        open={isAudioImportDialogOpen}
+        onClose={() => setIsAudioImportDialogOpen(false)}
+        onImported={(recording) => {
+          setIsAudioImportDialogOpen(false);
+          loadRecordings().then(() => handleSelectRecording(recording.id));
+        }}
+      />
+
       <aside className={sidebarCollapsed ? 'app-sidebar is-collapsed' : 'app-sidebar'}>
         <Sidebar
           activeView={activeView}
@@ -319,6 +357,10 @@ export default function App() {
           </div>
           {activeView === 'library' && (
             <div className="toolbar-actions">
+              <button type="button" className="button button-secondary" onClick={() => setIsAudioImportDialogOpen(true)}>
+                <FileAudio />
+                {t('history', 'importAudio')}
+              </button>
               <button
                 type="button"
                 className="button button-secondary"
@@ -376,6 +418,7 @@ export default function App() {
                     setActiveView('library');
                     setIsImportDialogOpen(true);
                   }}
+                  onImportAudio={() => setIsAudioImportDialogOpen(true)}
                 />
               </motion.div>
             ) : activeView === 'billing' ? (
